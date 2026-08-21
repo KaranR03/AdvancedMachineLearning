@@ -1,3 +1,6 @@
 Ass3/FGVCAircraft_Subset20.zip
 .DS_Store
+**/.DS_Store
 chest_xray/
+.ipynb_checkpoints/
+__pycache__/

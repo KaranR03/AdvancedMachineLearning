@@ -1,0 +1,42 @@
+PROVENANCE
+==========
+Per-student marker feedback on IFN680 Project 2, addressed to Karan Rooprai (n12498122),
+teammate in Group 4.
+
+Captured 21 Aug 2026 from README.md at the root of
+https://github.com/KaranR03/AdvancedMachineLearning, commit
+1d043de58bf3a6bd9ec1871616757a5735560e00 ("Add assessment remarks for Project 2").
+
+*** That commit was removed from the repository by a force-push to main on the same day.
+*** README.md no longer exists on any branch. This file is the archive of it. The text below
+*** is verbatim, including the ''' fences and the empty code comment, as it appeared in the file.
+
+Why it is kept: docs/assessment-submission-spec.md and the week-03 project README both record
+that Canvas returns no per-student marker comment for this unit, and treat the Project 1
+deduction as an INFERENCE from the cohort-level "IFN680 - update week 04" announcement
+(11 Aug 2026). This document shows per-student feedback does exist and reaches students by
+some channel other than the Canvas submission record, and it quotes the deduction rule
+verbatim rather than by inference.
+
+VERBATIM CONTENT
+================
+Assessment 2 remarks
+'''
+Dear Rooprai, Karan
+
+This is some feedback about your Project 2 submission. I have separated the feedback for your report and your code so that the grade and the justification for each component are clear.
+
+Report grade:
+2.5
+
+Report comment:
+D) The confusion matrix and all results should be reported on the testing set after training on train plus validation data.
+
+Code grade:
+2
+
+Code comment:
+ 
+
+If you have any questions, please feel free to ask during the tutorial.
+'''
