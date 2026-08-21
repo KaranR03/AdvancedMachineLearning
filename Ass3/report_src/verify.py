@@ -102,7 +102,7 @@ body = re.sub(r"\[\d+pt\]", "", body)                 # drop \\[2pt] spacing
 numbers = set(re.findall(r"\d+\.\d+", body))
 # Numbers that are part of the method description rather than a measured result. They are stated
 # in the notebooks' own markdown and in development.ipynb's code, not printed as output.
-DESIGN = {"0.001", "0.0001", "0.75", "0.87", "0.2", "0.01", "18.0", "34.0"}
+DESIGN = {"0.001", "0.0001", "0.75", "0.87", "0.2", "0.01"}
 untraceable = sorted(n for n in numbers - DESIGN if n not in printed)
 check("no unexplained decimal appears only in the report", not untraceable,
       f"untraceable: {untraceable}" if untraceable else "")
