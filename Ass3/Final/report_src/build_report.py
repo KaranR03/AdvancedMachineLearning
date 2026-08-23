@@ -229,7 +229,7 @@ ImageNet features separate the twenty aircraft types moderately well, but becaus
 cannot adapt, the head alone cannot capture the fine-grained differences between visually similar
 variants.
 
-\section{Experiment 1 --- Data augmentation}
+\section{Experiment 1: Data augmentation}
 \textbf{Hypothesis:} randomly flipping, rotating ($\pm15^\circ$) and colour-jittering the training
 images exposes the frozen extractor to more varied views, reducing over-fitting and improving
 validation accuracy. \textbf{Result: not supported.} Augmentation lowered best validation accuracy
@@ -239,16 +239,16 @@ regions of the fixed ImageNet feature space that the linear head has not learned
 epochs are too few to compensate. Augmentation therefore hurts a pure feature-extraction setup on
 this dataset.
 
-\section{Experiment 2 --- Fine-tuning the backbone}
+\section{Experiment 2: Fine-tuning the backbone}
 \textbf{Hypothesis:} ImageNet features are generic, so unfreezing the backbone and letting every
 layer adapt to aircraft should capture fine-grained variant differences and lift accuracy well
-above the frozen baseline. \textbf{Result: strongly supported.} Unfreezing the backbone --- the
-only change from the baseline, keeping the identical SGD optimiser and 0.001 learning rate ---
+above the frozen baseline. \textbf{Result: strongly supported.} Unfreezing the backbone was the
+only change from the baseline, keeping the identical SGD optimiser and 0.001 learning rate; it
 raised best validation accuracy to \textbf{@FT@}, a gain of @FTD@ (green curve, Figure~1). This is
 by far the largest single improvement, confirming that adapting the convolutional features, and
 not just the classifier, is what fine-grained aircraft recognition requires.
 
-\section{Experiment 3 --- AdamW and cosine annealing}
+\section{Experiment 3: AdamW and cosine annealing}
 \textbf{Hypothesis:} replacing plain SGD with AdamW (adaptive updates with decoupled weight decay)
 and decaying the learning rate on a cosine schedule should give faster, more stable convergence of
 the frozen head and a modest accuracy gain. \textbf{Result: supported, modestly.} With the backbone
@@ -257,13 +257,13 @@ the baseline (red curve, Figure~1). AdamW converges faster and to a slightly bet
 SGD, but with the backbone still frozen the ceiling is low, so the gain is real but small beside
 fine-tuning.
 
-Optimiser, decoupled weight decay and schedule are varied together as one variable --- the
+Optimiser, decoupled weight decay and schedule are varied together as one variable: the
 optimisation strategy, the axis the task description names. They are not separable the way a single
 hyperparameter is: decoupled weight decay is the very thing that distinguishes AdamW from Adam, and
 AdamW under cosine annealing is a different procedure rather than another setting of the same one.
 Everything outside that axis
---- frozen backbone, un-augmented data, @EXPEPOCHS@ epochs, batch size, 0.001 base learning rate
---- is identical to the baseline, so the comparison stays controlled.
+(frozen backbone, un-augmented data, @EXPEPOCHS@ epochs, batch size, 0.001 base learning rate)
+is identical to the baseline, so the comparison stays controlled.
 
 \begin{table}[t]
 \centering
@@ -272,7 +272,7 @@ Everything outside that axis
 \toprule
 Model & Best val.\ acc. & $\Delta$ base \\
 \midrule
-Baseline (frozen, SGD)     & @BASELINE@ & --- \\
+Baseline (frozen, SGD)     & @BASELINE@ & n/a \\
 Exp 1: + Augmentation      & @AUG@      & @AUGD@ \\
 Exp 2: Fine-tuning         & @FT@       & @FTD@ \\
 Exp 3: AdamW + cosine      & @ADAMW@    & @ADAMWD@ \\
@@ -308,7 +308,7 @@ Combining two separately validated changes alters the optimisation problem, so t
 was cut to 0.0001 for the final run: AdamW's adaptive steps on every backbone layer at 0.001 are
 more aggressive than either experiment tested, since Experiment~2 used SGD on all layers and
 Experiment~3 used AdamW on the head alone. This is the one deliberate departure from a validated
-configuration, and it is a design judgement rather than a measured result --- once the model is
+configuration, and it is a design judgement rather than a measured result: once the model is
 refit on all of \texttt{trainval}, no validation data survives on which to tune it.
 
 \textbf{Result.} \textbf{The final model was retrained on the entire \texttt{trainval} set (all
@@ -316,7 +316,7 @@ refit on all of \texttt{trainval}, no validation data survives on which to tune 
 every figure reported here is measured on the @NTEST@ held-out test images with that refit model,
 evaluated once.} It achieves an average per-class accuracy of \textbf{@AVGPC@}, comfortably
 exceeding the required 0.75, with overall accuracy @OVERALL@ and a macro-averaged F1 of @MACROF1@.
-Average per-class accuracy --- the mean of the @NCLASSES@ per-class recall values --- is the
+Average per-class accuracy, the mean of the @NCLASSES@ per-class recall values, is the
 reported metric rather than overall accuracy because it weights every aircraft type equally
 instead of letting the larger or easier classes dominate. The two agree closely here only because
 the test split is balanced. Macro F1 is given alongside because recall alone cannot see a class
@@ -325,8 +325,8 @@ the model over-predicts. The test confusion matrix is Figure~2.
 \section{Potential and limitations}
 The strong diagonal in Figure~2 shows most classes are recognised reliably: @NSTRONG@ of
 @NCLASSES@ score above 0.87 and the best (@BEST1@, @BEST2@) reach @BEST1ACC@ and @BEST2ACC@. The
-clear weakness is @WORST@ at @WORSTACC@, which is confused with @PARTNER@ in both directions
---- @CONFN@ @CONFA@ images are predicted as @CONFB@ and @RECIPN@ the other way --- indicating two
+clear weakness is @WORST@ at @WORSTACC@, which is confused with @PARTNER@ in both directions:
+@CONFN@ @CONFA@ images are predicted as @CONFB@ and @RECIPN@ the other way, indicating two
 visually near-identical variants the model cannot separate. @SECOND@ (@SECONDACC@) and @THIRD@
 (@THIRDACC@) fail similarly against look-alike types. The fine-tuned model also reaches
 @TRAINACC@ training accuracy within a few epochs, so the gap of roughly @GAP@ to test performance
@@ -340,9 +340,9 @@ learning suits a catalogue task with narrow visual differences. The anticipated 
 near-identical variants above, unlikely to separate without finer-grained supervision or
 higher-resolution inputs; the small per-class support, which makes every class score coarse; and
 uncalibrated output scores, which should not be read as probabilities in deployment. The obvious
-next steps are reintroducing light augmentation now the backbone is trainable --- augmentation
+next steps are reintroducing light augmentation now the backbone is trainable (augmentation
 regularises a fine-tuned network differently from a frozen one, so Experiment~1 does not settle the
-question --- tuning weight decay or dropout, early stopping, and a deeper backbone such as
+question), tuning weight decay or dropout, early stopping, and a deeper backbone such as
 ResNet-34 for the hardest look-alike pairs.
 
 \end{document}

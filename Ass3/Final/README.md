@@ -47,6 +47,13 @@ confusions 13 and 11. The previous bundle could not do that, which is what promp
   is a design judgement; the "for the target application" assessment the brief asks for; and the
   calibration / per-class-support caveats. These are report marks, and they are also the two
   questions most likely to come up in the oral.
+- Removed every em dash from the report prose. Each of the fourteen was replaced with the
+  punctuation its own sentence needed rather than one substitute throughout: a colon where the dash
+  introduced a definition or the evidence for the claim before it, paired commas for an appositive,
+  parentheses for an aside inside a list, and a semicolon where the dashes had split a subject from
+  its verb. One dash was not punctuation at all -- the baseline row of Table 1 used it for "no
+  change against itself", which now reads `n/a`. The rebuilt PDF contains zero em dashes and zero
+  en dashes, is still exactly 2 pages, and every number in it is unchanged.
 - `main_report.ipynb`: dropped a trailing empty cell, added PDF figure output, and made the
   dataset-missing error say where the dataset should go.
 - `development.ipynb`: **one source-only edit**, outputs untouched. Cell 27 had
