@@ -12,9 +12,16 @@ chest_xray/
 __pycache__/
 
 # Model checkpoints and pickles. Git keeps every version forever, so five iterations of a 45 MB
-# checkpoint is 225 MB of permanent history. Add the ONE final artefact per project with
-# `git add -f` at submission time; never commit iterative ones.
+# checkpoint is 225 MB of permanent history.
+#
+#   >>> THIS MEANS A SUBMISSION CHECKPOINT NEEDS `git add -f` OR IT IS SILENTLY LEFT BEHIND. <<<
+#
+# The grader runs main_report.ipynb, which loads the checkpoint; a submission without it scores 0
+# for the code. So at submission time, force-add the ONE final artefact per project:
+#
+#   git add -f Ass4/best_model.pth Ass4/histories.pkl
+#
+# and never commit iterative ones. Already-tracked files (Ass3/Final/*) are unaffected by these
+# patterns -- .gitignore only governs files git is not already tracking.
 *.pth
 *.pkl
-!Ass3/Final/project3_code/best_model.pth
-!Ass3/Final/project3_code/histories.pkl
