@@ -47,6 +47,20 @@ confusions 13 and 11. The previous bundle could not do that, which is what promp
   is a design judgement; the "for the target application" assessment the brief asks for; and the
   calibration / per-class-support caveats. These are report marks, and they are also the two
   questions most likely to come up in the oral.
+- **Commented both notebooks properly.** "Code not commented" is listed as a fault in the
+  coordinator's week-4 announcement, and the unit's own standard is that code must be well
+  commented. `development.ipynb` was at 2% comment density with 14 of its 18 code cells carrying
+  no comment at all; `main_report.ipynb` was at 1%. They are now at 37% and 32%. The comments
+  carry the *reasoning* rather than narrating the lines, because that is what the oral Q&A asks
+  about: why the seed covers three generators, why `antialias=True` is pinned, why the two
+  deep-copied datasets are needed, why the final learning rate is 0.0001.
+  Both edits were **source-only, with no re-execution**. Two invariants make that safe rather than
+  hoped-for: the `ast.dump()` of every cell is identical before and after, which proves no
+  executable code changed (comments do not appear in a parsed AST), and `outputs` plus
+  `execution_count` are asserted byte-identical. The first attempt failed this check honestly --
+  it had added docstrings, and a docstring *is* part of the AST -- so those became `#` comments.
+  Confirmed end to end by unzipping and running the notebook in an empty directory: output
+  identical to the shipped notebook, and `project3_report.pdf` is byte-for-byte the same file.
 - Removed every em dash from the report prose. Each of the fourteen was replaced with the
   punctuation its own sentence needed rather than one substitute throughout: a colon where the dash
   introduced a definition or the evidence for the claim before it, paired commas for an appositive,
