@@ -1,6 +1,20 @@
+# Datasets: supplied with the task, never committed. 158 MB for the aircraft subset alone.
 Ass3/FGVCAircraft_Subset20.zip
+FGVCAircraft_Subset20/
+chest_xray/
+
+# macOS / Jupyter / Python litter. A .DS_Store inside a submitted zip reads as carelessness, and
+# .ipynb_checkpoints is worse than untidy: ImageFolder ingests it as an extra class and shifts
+# every label.
 .DS_Store
 **/.DS_Store
-chest_xray/
 .ipynb_checkpoints/
 __pycache__/
+
+# Model checkpoints and pickles. Git keeps every version forever, so five iterations of a 45 MB
+# checkpoint is 225 MB of permanent history. Add the ONE final artefact per project with
+# `git add -f` at submission time; never commit iterative ones.
+*.pth
+*.pkl
+!Ass3/Final/project3_code/best_model.pth
+!Ass3/Final/project3_code/histories.pkl
