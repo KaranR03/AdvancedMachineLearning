@@ -14,6 +14,7 @@ Run:  python tools/build_pdf.py
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -47,4 +48,14 @@ count = re.search(r"^Pages:\s+(\d+)", pages, re.M).group(1)
 print(f"compiled {count} pages, {len(overfull)} overfull box warnings")
 if count != "2":
     print(f"  the report must be exactly 2 pages; it is {count}")
+
+# The copy the upload is taken from is refreshed here rather than only by build_zip.py, so that
+# compiling the report and then checking it cannot report a stale one. It is written only once the
+# report has passed its own checks, which keeps a three-page or overhanging build out of
+# submission/ entirely.
+if not overfull and count == "2":
+    os.makedirs(f"{BASE}/submission", exist_ok=True)
+    shutil.copyfile(f"{BASE}/report/project5_report.pdf",
+                    f"{BASE}/submission/project5_report.pdf")
+    print("  copied to submission/project5_report.pdf")
 raise SystemExit(1 if overfull or count != "2" else 0)
