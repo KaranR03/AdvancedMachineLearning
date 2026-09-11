@@ -237,7 +237,17 @@ if os.path.exists(archive):
             same = (hashlib.md5(zf.read(name)).hexdigest()
                     == hashlib.md5(io.open(f"{NBDIR}/{name}", "rb").read()).hexdigest())
             check(f"zip's {name} is the current notebook/ file", same)
-    check("submission report present", os.path.exists(f"{SUBMISSION}/project5_report.pdf"))
+    submitted = f"{SUBMISSION}/project5_report.pdf"
+    check("submission report present", os.path.exists(submitted))
+    if os.path.exists(submitted):
+        # Same reasoning as the archive entries above: the report is built in report/ and copied
+        # here, so a rebuild that skips the copy leaves the older file as the one that gets
+        # uploaded. Comparing sizes would not catch it, as a wording fix of equal length can
+        # produce a PDF of identical length.
+        check("submission report is the current build",
+              hashlib.md5(io.open(submitted, "rb").read()).hexdigest()
+              == hashlib.md5(io.open(f"{REPORT}/project5_report.pdf", "rb").read()).hexdigest(),
+              "run tools/build_zip.py to refresh the copy")
     check("archive is under 50 MB", os.path.getsize(archive) < 50 * 1024 * 1024,
           f"{os.path.getsize(archive) / 1024 / 1024:.1f} MB")
 else:

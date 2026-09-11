@@ -976,7 +976,7 @@ plt.show()
 CELL_MR_FIGURE2 = '''\
 # Figure 2: the same errors cut by how long the answer is and whether it is negative, which is
 # the axis the brief calls "longer strings".
-fig, axes = plt.subplots(1, 2, figsize=(6.6, 2.7), dpi=150)
+fig, axes = plt.subplots(2, 1, figsize=(3.9, 4.0), dpi=150)
 
 # Left panel: how long the answer is. Right panel: whether it is negative, which is the
 # only case carrying a sign token and the only one reverse mode emits last.
@@ -989,6 +989,9 @@ for xi, k in zip(x, digit_rows):
                  fontsize=7, color=INK)
     axes[0].text(xi + 0.2, length_rows[k][2], str(length_rows[k][2]), ha="center", va="bottom",
                  fontsize=7, color=INK)
+# The count above the tallest bar is drawn upwards from it, so the axis needs headroom of
+# its own or that label lands on the frame.
+axes[0].set_ylim(0, max(max(length_rows[k][1], length_rows[k][2]) for k in digit_rows) * 1.2)
 axes[0].set_xticks(x)
 axes[0].set_xticklabels([f"{k}\\n(n={length_rows[k][0]})" for k in digit_rows], fontsize=7)
 axes[0].set_ylabel("errors")
@@ -1006,6 +1009,7 @@ for xi, k in zip(x, sign_rows):
                  fontsize=7, color=INK)
     axes[1].text(xi + 0.2, length_rows[k][2], str(length_rows[k][2]), ha="center", va="bottom",
                  fontsize=7, color=INK)
+axes[1].set_ylim(0, max(max(length_rows[k][1], length_rows[k][2]) for k in sign_rows) * 1.2)
 axes[1].set_xticks(x)
 axes[1].set_xticklabels([f"{k}\\n(n={length_rows[k][0]})" for k in sign_rows], fontsize=7)
 axes[1].grid(alpha=0.25, axis="y")

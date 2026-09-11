@@ -270,6 +270,9 @@ V["test_n"] = V["forward_overall_n"]
 # outside the single-digit group, so the size of "outside" has to be the complement, not the
 # whole test set.
 V["len1_rest"] = str(int(V["test_n"]) - int(V["len1_n"]))
+# Answers with no thousands digit. The hundreds denominator is a different quantity and
+# reads as this one, so it is computed here instead of reused.
+V["pos_thousands_rest"] = str(int(V["test_n"]) - int(V["pos_thousands_n"]))
 V["sub_fraction"] = grab(r"subtraction fraction ([\d.]+)", "subtraction fraction")
 
 # --------------------------------------------------------------------------------- figures
@@ -560,7 +563,8 @@ __REVERSE_SUBTRACTION__ respectively (Table~1).
 \textbf{Digit-level performance.} Accuracy is reported per place value over the answers that
 actually have that place, rather than over zero-padded answers. The distinction matters: only
 __POS_THOUSANDS_N__ of __TEST_N__ answers reach the thousands column, so padding would score the
-other __POS_HUNDREDS_N__ as correct there by construction and drive every high position to 1.000.
+other __POS_THOUSANDS_REST__ as correct there by construction and drive every high position
+to 1.000.
 __PLACE_SENTENCE__ __SIGN_SENTENCE__
 
 \textbf{Direction effects.} The two models were scored on identical examples, so the comparison is
@@ -582,8 +586,9 @@ ordering makes hardest.
 __ALIGN_WORST_RE__ of Reverse's __REVERSE_OVERALL_ERR__ errors fall on the __ALIGN_WORST_N__
 prompts whose first operand is __ALIGN_MAX_DIFF__ digits longer than the second, a rate of
 __ALIGN_WORST_RRATE__ there against __ALIGN_EASY_RE__ errors across the other __ALIGN_EASY_N__
-examples. Of those failures __REV_PLACE1__ are wrong at the tens digit,
-the first place the model reaches after the shorter operand has run out of digits.
+examples. Among the errors that keep the right number of digits, __REV_PLACE1__ are wrong at
+the tens digit, the first place the model reaches after the shorter operand has run out of
+digits; __REV_WRONGLEN__ predictions have the wrong length instead.
 Emitting units first makes the units column trivial, because both operands end there, but it
 forces the model to detect that one operand is exhausted and carry the remainder
 alone.__COMPLEMENT_CLAUSE__
@@ -612,6 +617,17 @@ Reverse & subtraction & __REVERSE_SUBTRACTION_N__ & __REVERSE_SUBTRACTION_ERR__ 
 expected level by a wide margin, so the informative object is the small number of errors rather
 than the rates.}
 \end{table}
+
+% Figure 1 is hand-labelled inside \twocolumn[...], so the counter is still at zero here.
+\setcounter{figure}{1}
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\columnwidth]{figures/figure_2_by_length.pdf}
+\caption{\textbf{Top:} errors by the number of digits in the answer, with the size of each
+group underneath. \textbf{Bottom:} errors by the sign of the answer, which the reverse ordering
+emits last. Both panels count the same errors as Figure~1, cut by the shape of the answer rather
+than by the operation.}
+\end{figure}
 
 \begin{table}[b]
 \centering
