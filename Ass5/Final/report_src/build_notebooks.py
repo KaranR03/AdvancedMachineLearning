@@ -40,11 +40,10 @@ CELL_IMPORTS = '''\
 # Same stack as the Week 7 workshop, plus json for the machine readable result dumps.
 import json
 import math
-import os
-import pickle
+__IMPORT_OS__import pickle
 import random
 import re
-import time
+__IMPORT_TIME__
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,7 +52,7 @@ from torch import nn
 from torch.nn import functional as F
 
 # The brief asks for the GPU environment. The model still runs on CPU when no GPU is visible,
-# which is what lets a marker run this notebook on a laptop and get the same answers.
+# so the notebook runs unchanged on a machine without one and gives the same answers.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"device : {device}")
 print(f"torch  : {torch.__version__}")
@@ -64,7 +63,9 @@ print(f"numpy  : {np.__version__}")
 SEED = 0
 random.seed(SEED)
 np.random.seed(SEED)
-torch.manual_seed(SEED)
+# Bound to _ because manual_seed returns the Generator it just seeded, and a bare call as the
+# last line of a cell would store that object's repr as an output.
+_ = torch.manual_seed(SEED)
 '''
 
 CELL_TOKENIZER = '''\
@@ -283,8 +284,8 @@ CELL_GENERATION = '''\
 def generate(model, prompts, new_tokens=6):
     """Greedy autoregressive decoding: append the arg max token, then feed it back in.
 
-    Greedy rather than sampled, so the evaluation is deterministic and a marker re-running this
-    notebook on different hardware gets the same predictions.
+    Greedy rather than sampled, so decoding is deterministic: re-running this notebook on
+    different hardware gives the same predictions.
     """
     input_tensor = prompts.to(device)
     for _ in range(new_tokens):
@@ -396,9 +397,9 @@ else:
         data_test = pickle.load(handle)
     print("loaded the shared project5_testset.pkl")
 
-# Disjointness is asserted rather than assumed. Slicing one shuffled list already guarantees
-# it, but the assertion is what a reader can check in a second, and it is the question the
-# 0.78 target invites.
+# Slicing one shuffled list already guarantees the three splits are disjoint. The assertion
+# below restates that guarantee as something the reader can watch pass, because a held-out
+# score means nothing if a test prompt was also trained on.
 train_prompts = {p for p, _ in data_train} | {p for p, _ in data_val}
 overlap = sum(1 for p, _ in data_test if p in train_prompts)
 assert overlap == 0, f"{overlap} test prompts also appear in train or validation"
@@ -453,9 +454,9 @@ def train_epoch(model, optimizer, data, reverse, batch_size=100):
 '''
 
 CELL_TRAIN_LOOP = '''\
-# Per-epoch validation, so convergence can be read off a curve rather than asserted. Training
-# accuracy is measured on a fixed subset because scoring the full training set every epoch
-# would cost more than the epoch itself.
+# Validation runs every epoch, which is what turns training into a curve that can be read for
+# convergence instead of a single final number. Training accuracy is measured on a fixed subset
+# because scoring the full training set every epoch would cost more than the epoch itself.
 history = {"loss": [], "val_digit": [], "val_seq": [], "train_seq": []}
 started = time.time()
 for epoch in range(1, epochs + 1):
@@ -504,6 +505,9 @@ for epoch in range(1, epochs + 1):
     history_small["loss"].append(loss)
     history_small["val_digit"].append(val_digit)
     history_small["val_seq"].append(val_seq)
+    # The full run records training accuracy on a fixed probe subset; the ablation skips that
+    # measurement to keep the two runs equal in cost per epoch. NaN keeps the four history
+    # lists the same length without drawing a line matplotlib would otherwise interpolate.
     history_small["train_seq"].append(float("nan"))
     print(f"epoch {epoch:2d}  loss {loss:.4f}  val digit {val_digit:.4f}  val seq {val_seq:.4f}")
 print(f"ablation on {len(data_small)} examples finished in {(time.time() - started) / 60:.1f} min")
@@ -592,7 +596,8 @@ print("loaded LLMForward.pth and LLMReverse.pth")
 
 CELL_MR_PREDICT = '''\
 # Both models are run over the same list in the same order, and the prompts are compared
-# afterwards, so "evaluated on identical examples" is checked rather than intended.
+# afterwards. The paired test further down is only valid if the two really did see identical
+# examples, so that condition is confirmed here before anything depends on it.
 # reverse= is passed explicitly rather than read from a global, so each call states which
 # convention it is decoding under.
 prompts, trues, preds_f = predict_numeric(forward_model, data_test, reverse=False)
@@ -637,18 +642,13 @@ def mcnemar_exact(preds_a, preds_b):
 
 def is_correct(prediction, truth):
     return prediction is not None and prediction == truth
-
-
-def overall_counts(preds):
-    correct = sum(1 for t, p in zip(trues, preds) if is_correct(p, t))
-    return correct, len(trues)
 '''
 
 CELL_MR_OVERALL = '''\
-# Overall and per-operation accuracy, with the count behind each rate and a Wilson interval, so
-# the margin above the 0.78 target can be read rather than taken on trust.
+# Overall and per-operation accuracy, with the count behind each rate and a Wilson interval.
+# The interval is what shows whether the margin above the target is larger than sampling error.
 print(f"{'mode':>8} | {'split':>12} | {'n':>6} | {'correct':>7} | {'accuracy':>8} | {'95% CI':>16}")
-# Keyed (mode, split) so tools/build_report.py can pull any single cell out by name.
+# Keyed (mode, split) so any single cell of this table can be looked up by name below.
 results_table = {}
 for name, preds in [("Forward", preds_f), ("Reverse", preds_r)]:
     for split in ["overall", "addition", "subtraction"]:
@@ -664,7 +664,8 @@ for name, preds in [("Forward", preds_f), ("Reverse", preds_r)]:
         print(f"{name:>8} | {split:>12} | {n:>6} | {correct:>7} | {correct / n:>8.4f} | "
               f"[{low:.4f}, {high:.4f}]")
 
-# The rubric prices a measured threshold, so it is asserted here rather than eyeballed.
+# The task sets __TARGET__ as the level both models have to clear. Asserting it makes the
+# notebook stop if a re-run ever falls below it, instead of quietly reporting a lower number.
 for name in ["Forward", "Reverse"]:
     assert results_table[(name, "overall")][2] > __TARGET__, f"{name} is below the target"
 print(f"\\nboth models exceed the __TARGET__ target on the held-out set")
@@ -681,19 +682,24 @@ print(f"exact McNemar two-sided p    : {p_value:.3e}")
 '''
 
 CELL_MR_POSITION = '''\
-def position_accuracy(preds):
+def position_accuracy(preds, index=None):
     """Per-place accuracy, counted only over answers that HAVE that place.
 
     Zero-padding every answer to four digits would score the thousands place as correct for
     every two-digit answer, which inflates the high positions towards 1.0 by construction. Each
     position is therefore measured only on the answers long enough to reach it. The sign is a
     separate question and is measured over everything.
+
+    index restricts the measurement to a subset of the test set, which is how the split by
+    operation below reuses this function without duplicating the counting logic.
     """
     labels = ["thousands", "hundreds", "tens", "units"]
     correct = {k: 0 for k in labels}
     total = {k: 0 for k in labels}
     sign_correct = 0
-    for truth, prediction in zip(trues, preds):
+    rows = list(range(len(trues))) if index is None else list(index)
+    for row in rows:
+        truth, prediction = trues[row], preds[row]
         digits_true = str(abs(truth))
         digits_pred = str(abs(prediction)) if prediction is not None else ""
         width = len(digits_true)
@@ -705,8 +711,8 @@ def position_accuracy(preds):
             correct[label] += (got == digits_true[offset])
         sign_correct += (prediction is not None and (prediction < 0) == (truth < 0))
     accuracy = {k: (correct[k] / total[k] if total[k] else float("nan")) for k in labels}
-    accuracy["sign"] = sign_correct / len(trues)
-    total["sign"] = len(trues)
+    accuracy["sign"] = sign_correct / len(rows) if rows else float("nan")
+    total["sign"] = len(rows)
     return accuracy, total
 
 
@@ -714,9 +720,35 @@ def position_accuracy(preds):
 # towards the thousands row, which is why the counts fall as the place value rises.
 acc_f, n_f = position_accuracy(preds_f)
 acc_r, n_r = position_accuracy(preds_r)
+PLACES = ["thousands", "hundreds", "tens", "units", "sign"]
 print(f"{'position':>10} | {'n':>6} | {'Forward':>8} | {'Reverse':>8}")
-for label in ["thousands", "hundreds", "tens", "units", "sign"]:
+for label in PLACES:
     print(f"{label:>10} | {n_f[label]:>6} | {acc_f[label]:>8.4f} | {acc_r[label]:>8.4f}")
+
+# The same measurement split by operation, which the task asks for alongside the split by mode.
+# Note what the thousands row does here: both operands are at most three digits, so a difference
+# can never exceed 999 and no subtraction answer has a thousands digit at all. That cell is empty
+# by construction, and printing n/a says so rather than implying a rate of zero.
+add_index = [i for i in range(len(trues)) if operation_of(prompts[i]) == "+"]
+sub_index = [i for i in range(len(trues)) if operation_of(prompts[i]) == "-"]
+acc_fa, n_add = position_accuracy(preds_f, add_index)
+acc_ra, _ = position_accuracy(preds_r, add_index)
+acc_fs, n_sub = position_accuracy(preds_f, sub_index)
+acc_rs, _ = position_accuracy(preds_r, sub_index)
+
+
+def rate(value, n):
+    """Format a rate, or n/a when the group it would describe is empty."""
+    return f"{value:8.4f}" if n else f"{'n/a':>8}"
+
+
+print()
+print(f"{'position':>10} | {'n add':>6} | {'Fwd add':>8} | {'Rev add':>8} | "
+      f"{'n sub':>6} | {'Fwd sub':>8} | {'Rev sub':>8}")
+for label in PLACES:
+    print(f"{label:>10} | {n_add[label]:>6} | {rate(acc_fa[label], n_add[label])} | "
+          f"{rate(acc_ra[label], n_add[label])} | {n_sub[label]:>6} | "
+          f"{rate(acc_fs[label], n_sub[label])} | {rate(acc_rs[label], n_sub[label])}")
 '''
 
 CELL_MR_CARRY = '''\
@@ -845,8 +877,9 @@ for name, preds in [("Forward", preds_f), ("Reverse", preds_r)]:
     for i in wrong:
         kind = describe_error(i, preds[i])
         error_kinds[name][kind] = error_kinds[name].get(kind, 0) + 1
-    # Every error is printed when there are few enough to read; otherwise the first twelve.
-    for i in wrong[:12]:
+    # Both models make few enough errors to print in full, and printing all of them is what
+    # lets the report's table of example failures be checked against the complete list.
+    for i in wrong:
         print(f"{name:>8} | {prompts[i]:>12} | {trues[i]:>7} | {str(preds[i]):>10} | "
               f"{describe_error(i, preds[i]):>18}")
     print(f"{name}: {len(wrong)} errors in {len(trues)} examples")
@@ -909,64 +942,79 @@ __PALETTE__
 # Figure 1 for the report. Counts rather than accuracies in the right two panels: every accuracy
 # here is above 0.98, so a bar chart of rates renders the two models as identical rectangles,
 # while the error counts differ by an order of magnitude and are legible.
-fig, axes = plt.subplots(1, 3, figsize=(10.5, 3.0), dpi=150)
+# figsize sets how big the labels end up. The report places this at 6.95 in across both
+# columns, so every size below is multiplied by roughly 0.67 on the page: 10 pt here renders
+# near 6.7 pt, which is the smallest that stays comfortable beside 10 pt body text. The height
+# is kept tight because this figure spans both columns, so every inch of it costs two inches
+# of text.
+fig, axes = plt.subplots(1, 3, figsize=(10.5, 2.6), dpi=150)
 
 # Left panel: convergence. Solid is the full training set, dashed the reduced one.
 ax = axes[0]
 for mode, colour in [("Forward", ACCENT), ("Reverse", WARM)]:
     for size, style in [("_full", "-"), ("_80k", "--")]:
         curve = histories[(mode, size)]["val_seq"]
-        label = f"{mode}, {'__TRAIN__' if size == '_full' else '__ABLATION__'}"
-        ax.plot(range(1, len(curve) + 1), curve, style, color=colour, lw=1.6, label=label)
+        # Only the full-set curves are labelled. Colour is the direction and the line style is
+        # the training set size, so naming all four would state the colour key twice and make
+        # the box wider than the empty part of the panel, which put it over the curves.
+        ax.plot(range(1, len(curve) + 1), curve, style, color=colour, lw=1.6,
+                label=mode if size == "_full" else None)
 ax.axhline(__TARGET__, color=GREEN, lw=1.0, ls="-.")
 ax.set_xlabel("epoch")
 ax.set_ylabel("validation sequence accuracy")
 ax.set_ylim(0, 1.02)
 ax.grid(alpha=0.25)
-ax.legend(fontsize=7, loc="lower right")
-ax.set_title("Convergence by direction and data size", fontsize=9, color=INK)
+# Centre right is the only part of this panel no curve passes through: everything has either
+# reached 1.0 by then or, for the reduced reverse run, stayed near 0.1 throughout.
+ax.legend(fontsize=10, loc="center right", labelspacing=0.25, handlelength=1.6,
+          borderpad=0.3, framealpha=0.95)
+ax.set_title("Convergence by direction and data size", fontsize=11, color=INK)
 
 ax = axes[1]
 # Two line tick labels: at the width this figure is embedded, the carry and borrow
 # names collide when set on one line.
-NL = chr(10)
-categories = [("add" + NL + "no carry", "carry", "no_carry"),
-              ("add" + NL + "carry", "carry", "with_carry"),
-              ("sub" + NL + "no borrow", "borrow", "no_borrow"),
-              ("sub" + NL + "borrow", "borrow", "with_borrow")]
+categories = [("add\\nno carry", "carry", "no_carry"),
+              ("add\\ncarry", "carry", "with_carry"),
+              ("sub\\nno borrow", "borrow", "no_borrow"),
+              ("sub\\nborrow", "borrow", "with_borrow")]
 x = np.arange(len(categories))
 errors_f = [cb_f[g][k][1] - cb_f[g][k][0] for _, g, k in categories]
 errors_r = [cb_r[g][k][1] - cb_r[g][k][0] for _, g, k in categories]
 ax.bar(x - 0.2, errors_f, 0.4, color=ACCENT, label="Forward")
 ax.bar(x + 0.2, errors_r, 0.4, color=WARM, label="Reverse")
 for xi, value in zip(x - 0.2, errors_f):
-    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=7, color=INK)
+    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=10, color=INK)
 for xi, value in zip(x + 0.2, errors_r):
-    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=7, color=INK)
+    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=10, color=INK)
 ax.set_xticks(x)
-ax.set_xticklabels([c[0] for c in categories], fontsize=7)
+ax.set_xticklabels([c[0] for c in categories], fontsize=10)
 ax.set_ylabel("errors")
+ax.set_ylim(0, max(errors_f + errors_r) * 1.25)
 ax.grid(alpha=0.25, axis="y")
-ax.legend(fontsize=7)
-ax.set_title("Where the errors fall", fontsize=9, color=INK)
+ax.legend(fontsize=10, labelspacing=0.25, handlelength=1.4, borderpad=0.3)
+ax.set_title("Where the errors fall", fontsize=11, color=INK)
 
 ax = axes[2]
 labels = ["thousands", "hundreds", "tens", "units", "sign"]
+# Abbreviated on the axis only. Set large enough to read once the figure is scaled into the
+# report, the five full words overlap; the keys above stay spelled out.
+tick_labels = ["1000s", "100s", "10s", "1s", "sign"]
 wrong_f = [round((1 - acc_f[k]) * n_f[k]) for k in labels]
 wrong_r = [round((1 - acc_r[k]) * n_r[k]) for k in labels]
 x = np.arange(len(labels))
 ax.bar(x - 0.2, wrong_f, 0.4, color=ACCENT, label="Forward")
 ax.bar(x + 0.2, wrong_r, 0.4, color=WARM, label="Reverse")
 for xi, value in zip(x - 0.2, wrong_f):
-    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=7, color=INK)
+    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=10, color=INK)
 for xi, value in zip(x + 0.2, wrong_r):
-    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=7, color=INK)
+    ax.text(xi, value, str(value), ha="center", va="bottom", fontsize=10, color=INK)
 ax.set_xticks(x)
-ax.set_xticklabels(labels, fontsize=7)
+ax.set_xticklabels(tick_labels, fontsize=10)
 ax.set_ylabel("wrong digits")
+ax.set_ylim(0, max(wrong_f + wrong_r) * 1.25)
 ax.grid(alpha=0.25, axis="y")
-ax.legend(fontsize=7)
-ax.set_title("Wrong digits by place value", fontsize=9, color=INK)
+ax.legend(fontsize=10, labelspacing=0.25, handlelength=1.4, borderpad=0.3)
+ax.set_title("Wrong digits by place value", fontsize=11, color=INK)
 
 plt.tight_layout()
 plt.savefig("figure_1_overview.pdf", bbox_inches="tight")
@@ -976,7 +1024,9 @@ plt.show()
 CELL_MR_FIGURE2 = '''\
 # Figure 2: the same errors cut by how long the answer is and whether it is negative, which is
 # the axis the brief calls "longer strings".
-fig, axes = plt.subplots(2, 1, figsize=(3.9, 4.0), dpi=150)
+# Placed in a single column at 3.47 in against a native 3.8, so the scale here is about 0.91
+# and 7 pt renders near 6.4 pt. The height is trimmed to what two small bar panels need.
+fig, axes = plt.subplots(2, 1, figsize=(3.9, 3.0), dpi=150)
 
 # Left panel: how long the answer is. Right panel: whether it is negative, which is the
 # only case carrying a sign token and the only one reverse mode emits last.
@@ -993,7 +1043,7 @@ for xi, k in zip(x, digit_rows):
 # its own or that label lands on the frame.
 axes[0].set_ylim(0, max(max(length_rows[k][1], length_rows[k][2]) for k in digit_rows) * 1.2)
 axes[0].set_xticks(x)
-axes[0].set_xticklabels([f"{k}\\n(n={length_rows[k][0]})" for k in digit_rows], fontsize=7)
+axes[0].set_xticklabels([f"{k}\\n(n={length_rows[k][0]:,})" for k in digit_rows], fontsize=7)
 axes[0].set_ylabel("errors")
 axes[0].grid(alpha=0.25, axis="y")
 axes[0].legend(fontsize=7)
@@ -1011,7 +1061,7 @@ for xi, k in zip(x, sign_rows):
                  fontsize=7, color=INK)
 axes[1].set_ylim(0, max(max(length_rows[k][1], length_rows[k][2]) for k in sign_rows) * 1.2)
 axes[1].set_xticks(x)
-axes[1].set_xticklabels([f"{k}\\n(n={length_rows[k][0]})" for k in sign_rows], fontsize=7)
+axes[1].set_xticklabels([f"{k}\\n(n={length_rows[k][0]:,})" for k in sign_rows], fontsize=7)
 axes[1].grid(alpha=0.25, axis="y")
 axes[1].legend(fontsize=7)
 axes[1].set_title("Errors by sign of the answer", fontsize=9, color=INK)
@@ -1022,8 +1072,8 @@ plt.show()
 '''
 
 CELL_MR_SUMMARY = '''\
-# One machine-readable dump of everything the report quotes, so tools/build_report.py can pull
-# each number out by name instead of the report restating them by hand.
+# One machine-readable dump of everything the report quotes, keyed by name, so every number
+# in the report can be traced back to the cell that produced it.
 summary = {
     "overall": {name: {"correct": results_table[(name, "overall")][0],
                        "n": results_table[(name, "overall")][1],
@@ -1069,7 +1119,10 @@ def code(cell_id, source):
 
 
 def fill(text, **extra):
-    values = {"__TRAIN__": f"{TRAIN}", "__VAL__": f"{VAL}", "__TEST__": f"{TEST}",
+    # os and time are used by the training loop and by nothing in main_report, so the import
+    # list is built per notebook instead of carrying a name one of the three never calls.
+    values = {"__IMPORT_OS__": "import os\n", "__IMPORT_TIME__": "import time\n",
+              "__TRAIN__": f"{TRAIN}", "__VAL__": f"{VAL}", "__TEST__": f"{TEST}",
               "__ABLATION__": f"{ABLATION}", "__EPOCHS__": f"{EPOCHS}",
               "__MIN_TEST__": f"{min(TEST, 10000)}",
               "__TRAIN_PROBE__": f"{min(5000, TRAIN)}",
@@ -1100,13 +1153,29 @@ SHARED = [
     ("code-data", CELL_DATA),
     ("md-step2b", "### Reverse-order transform, parsing, and carry or borrow structure"),
     ("code-helpers", CELL_REVERSE_HELPERS),
-    ("md-step3", "## Step 3: Positional encoding"),
+    ("md-step3", "## Step 3: Positional encoding\n\nSelf-attention sees a set of tokens, "
+                 "not a sequence, so position has to be added to the embedding before the "
+                 "model can tell `12+3` from `21+3`. The fixed sinusoidal encoding of the "
+                 "workshop is kept unchanged. Note what it encodes: where a digit sits in the "
+                 "string, not what place value it holds. Those two coincide for the forward "
+                 "ordering and not for the reverse one."),
     ("code-posenc", CELL_POSENC),
-    ("md-step4", "## Step 4: Transformer model"),
+    ("md-step4", "## Step 4: Transformer model\n\nA causal decoder. Each position may "
+                 "attend only to positions at or before it, which is what makes it safe to "
+                 "train on every position of a sequence at once: no position can reach the "
+                 "answer it is being asked to predict."),
     ("code-model", CELL_MODEL),
-    ("md-step5", "## Step 5: Generation, padding and batching"),
+    ("md-step5", "## Step 5: Generation, padding and batching\n\nPrompts differ in length, "
+                 "so they are padded to a common width before being stacked into a batch. "
+                 "Decoding takes the arg max at every step instead of sampling, which makes a "
+                 "prediction a function of the weights alone and the whole evaluation "
+                 "repeatable."),
     ("code-generation", CELL_GENERATION),
-    ("md-step6", "## Step 6: Accuracy metrics"),
+    ("md-step6", "## Step 6: Accuracy metrics\n\nTwo levels, because they answer different "
+                 "questions. Digit accuracy counts individual characters and shows how close a "
+                 "wrong answer was; sequence accuracy demands the entire answer and is the one "
+                 "the task is scored on. Sequence accuracy is always the lower of the two, and "
+                 "the gap between them is a measure of how near the misses are."),
     ("code-evaluate", CELL_EVALUATE),
 ]
 
@@ -1158,28 +1227,61 @@ def build_main_report():
     cells = [markdown("md-title", fill(HEADER, __TITLE__="main_report", __INTRO__=intro))]
     for cell_id, source in SHARED:
         cells.append(markdown(cell_id, source) if cell_id.startswith("md-")
-                     else code(cell_id, fill(source)))
+                     else code(cell_id, fill(source, __IMPORT_OS__="", __IMPORT_TIME__="")))
     cells += [
         markdown("md-load", "## Load the shared test set, and verify it\n\nThe test set is "
                             "regenerated from `SEED` and compared against the file that ships "
                             "in the archive, so both its contents and its disjointness from "
-                            "training are checked here rather than asserted in prose."),
+                            "training are confirmed before any accuracy is computed."),
         code("code-load", fill(CELL_MR_LOAD)),
         markdown("md-models", "## Load both trained models"),
         code("code-models", fill(CELL_MR_MODELS)),
         markdown("md-predict", "## Predict with both models on the same examples"),
         code("code-predict", fill(CELL_MR_PREDICT)),
-        markdown("md-stats", "## Statistical helpers"),
+        markdown("md-stats", "## Statistical helpers\n\nTwo tools, for two different "
+                             "questions. A Wilson interval puts a range around a single "
+                             "accuracy; it is used instead of the textbook normal interval "
+                             "because these rates sit hard against the boundary at 1.0, where "
+                             "the normal interval runs past it and stops meaning anything. "
+                             "McNemar's exact test compares the two models, and it is the "
+                             "correct test here because both answered the same examples, so "
+                             "only the cases where they disagree carry information."),
         code("code-stats", fill(CELL_MR_STATS)),
-        markdown("md-overall", "## Overall and per-operation accuracy"),
+        markdown("md-overall", "## Operation robustness: overall and per-operation accuracy\n\nThe headline "
+                               "number for each model, then the same number split by "
+                               "operation. The split matters because subtraction is the "
+                               "harder half: it borrows, and it can produce a negative "
+                               "answer, so a model that looks strong overall can still be "
+                               "carrying most of its errors on one side."),
         code("code-overall", fill(CELL_MR_OVERALL)),
-        markdown("md-mcnemar", "## Direction effects: a paired test"),
+        markdown("md-mcnemar", "## Direction effects: a paired test\n\nComparing two "
+                               "accuracies measured on the same examples is not the same as "
+                               "comparing two independent samples. The pairing removes the "
+                               "variation caused by which examples happened to be drawn, "
+                               "leaving only the cases the two models answer differently."),
         code("code-mcnemar", fill(CELL_MR_MCNEMAR)),
-        markdown("md-position", "## Digit-level performance"),
+        markdown("md-position", "## Digit-level performance\n\nA sequence is either right "
+                                "or wrong, which hides how close a wrong answer came. Scoring "
+                                "each place value separately shows where a model loses a "
+                                "digit. Each place is counted only over answers long enough "
+                                "to have it: zero-padding every answer to four digits would "
+                                "mark the thousands place correct for every two-digit answer "
+                                "and drive the high positions to 1.0 by construction."),
         code("code-position", fill(CELL_MR_POSITION)),
-        markdown("md-carry", "## Carry and borrow cases"),
+        markdown("md-carry", "## Carry and borrow cases\n\nA carry or a borrow is a "
+                             "column whose result depends on the column beside it, which is "
+                             "exactly the dependency the two orderings treat differently. "
+                             "Forward emits the most significant digit first, before the "
+                             "carries underneath it have been worked out. Reverse emits the "
+                             "units digit first, travelling in the same direction a carry "
+                             "does by hand."),
         code("code-carry", fill(CELL_MR_CARRY)),
-        markdown("md-length", "## Errors by answer length and sign"),
+        markdown("md-length", "## Errors by answer length and sign\n\nAnswer length "
+                              "stands in for how much a model has to commit to before it "
+                              "writes anything: predicting left to right means choosing how "
+                              "many digits the answer has first. The sign is the mirror case, "
+                              "since the reverse ordering places it last, after the entire "
+                              "magnitude has been emitted."),
         code("code-length", fill(CELL_MR_LENGTH)),
         markdown("md-alignment", "## Where each direction actually breaks\n\nThe two orderings "
                                  "make different things hard. Left to right has to settle the "
@@ -1187,15 +1289,33 @@ def build_main_report():
                                  "keep track of the columns once the shorter operand has run "
                                  "out. The two cuts below test exactly those two predictions."),
         code("code-alignment", fill(CELL_MR_ALIGNMENT)),
-        markdown("md-errors", "## Every error, and what kind it is"),
+        markdown("md-errors", "## Error patterns: every error, and what kind it is\n\nBoth models make "
+                              "few enough mistakes to list in full. Each is classified by "
+                              "what went wrong, so the failures can be counted by kind as "
+                              "well as read individually, and so a claim about them can be "
+                              "checked against the complete list rather than a sample."),
         code("code-errors", fill(CELL_MR_ERRORS)),
-        markdown("md-curves", "## Learning curves from the training runs"),
+        markdown("md-curves", "## Learning curves from the training runs\n\nThe "
+                              "histories saved by the two training notebooks, reloaded here "
+                              "so that every figure the report carries is produced by this "
+                              "one notebook. Each direction was trained twice, on the full "
+                              "set and on a reduced one, which is what separates the effect "
+                              "of data volume from the effect of ordering."),
         code("code-curves", fill(CELL_MR_CURVES)),
-        markdown("md-fig1", "## Figure 1 for the report"),
+        markdown("md-fig1", "## Figure 1 for the report\n\nThree panels: convergence, "
+                            "errors by carry and borrow case, and wrong digits by place "
+                            "value. The right two panels plot counts instead of rates, "
+                            "because every accuracy here is above 0.98 and bars of "
+                            "near-identical rates would look identical."),
         code("code-fig1", fill(CELL_MR_FIGURE1)),
-        markdown("md-fig2", "## Figure 2 for the report"),
+        markdown("md-fig2", "## Figure 2 for the report\n\nThe same errors cut by the "
+                            "shape of the answer rather than by the operation: how many "
+                            "digits it has, and whether it is negative."),
         code("code-fig2", fill(CELL_MR_FIGURE2)),
-        markdown("md-summary", "## Machine-readable summary"),
+        markdown("md-summary", "## Machine-readable summary\n\nEvery number the report "
+                               "quotes, dumped as JSON in one place. Collecting them here "
+                               "means each value in the report traces back to the cell "
+                               "that produced it, rather than being copied across by hand."),
         code("code-summary", fill(CELL_MR_SUMMARY)),
     ]
     return cells

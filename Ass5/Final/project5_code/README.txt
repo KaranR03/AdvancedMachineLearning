@@ -18,7 +18,8 @@ CONTENTS
 
 HOW TO RUN
   Unzip everything into one folder and run main_report.ipynb top to bottom. It needs no
-  arguments and no data beyond what is in this archive, and takes about a minute on CPU.
+  arguments and no data beyond what is in this archive: about ten seconds on the GPU node, or
+  about a minute on a CPU.
 
   The two training notebooks reproduce the checkpoints from scratch. Thirty epochs on the
   full training set took about seventeen minutes on the IFN680 GPU node, and each notebook
@@ -26,10 +27,10 @@ HOW TO RUN
   roughly half an hour per notebook in total.
 
   Every tensor and both models are moved with .to(device), where device is cuda when one is
-  visible and cpu otherwise, so the notebooks run unchanged on either. The two training
-  notebooks were run on the IFN680 GPU node and main_report.ipynb on a CPU, and the accuracies
-  they report agree to the last digit: decoding is greedy, so the device changes the speed and
-  not the result.
+  visible and cpu otherwise, so the notebooks run unchanged on either. All three were run on the
+  IFN680 GPU node, and main_report.ipynb was also run on a CPU with a different torch and numpy
+  build: every number it prints is the same to the last digit. Decoding is greedy, so the device
+  changes the speed and not the result.
 
   The held-out test set is regenerated from SEED inside main_report.ipynb and compared
   against the shipped project5_testset.pkl, so the split can be audited without trusting
