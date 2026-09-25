@@ -267,10 +267,10 @@ SPREAD_BAND = "same" if abs(SPREAD_CHANGE) < 0.05 else ("down" if SPREAD_CHANGE 
 V["spread_sentence"] = (
     f"Within-class spread is {SPREAD['base']} for the baseline and {SPREAD['adv']} with the "
     "discriminator loss (1 matches real variety), so "
-    + {"down": "the discriminator's samples are less varied, a step toward the mode collapse "
-               "GANs are known for.",
-       "same": "the discriminator left the samples' variety essentially unchanged.",
-       "up": "the discriminator's samples are more varied, not less."}[SPREAD_BAND])
+    + {"down": "samples with the discriminator loss are less varied, a step toward the mode "
+               "collapse GANs are known for.",
+       "same": "the discriminator loss left the samples' variety essentially unchanged.",
+       "up": "samples with the discriminator loss are more varied, not less."}[SPREAD_BAND])
 
 # The sweep: whether the chosen lambda sits at an edge of the range tried.
 V["sweep_range"] = f"\\{{{', '.join(LAMBDAS)}\\}}"
@@ -288,7 +288,8 @@ V["sweep_sentence"] = (
 
 CONV_OK = V["conv_ok_base"] == "True" and V["conv_ok_adv"] == "True"
 V["conv_sentence"] = (
-    f"both runs meet it (changes of {V['conv_change_base']} and {V['conv_change_adv']}; "
+    f"both runs meet it (relative changes of {V['conv_change_base']} and "
+    f"{V['conv_change_adv']}; "
     "Figure~2b)."
     if CONV_OK else
     f"the changes are {V['conv_change_base']} for the baseline and {V['conv_change_adv']} with "

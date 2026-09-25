@@ -1299,16 +1299,17 @@ The trick is to draw the randomness separately, `eps ~ N(0, I)`, and compute
 `sigma` as through any other arithmetic. `encode()` and `decode()` expose the two halves, which the
 evaluation code uses to rebuild an image from `mu` alone."""
 
-MD_SETTINGS = r"""### 3.4 Settings, and a shape check
+MD_SETTINGS = r"""### 3.4 Settings
 
-The settings every cVAE run in this project shares, then one forward pass. The printed shapes
-confirm the adapted model takes a 1 x 20 x 20 image to a 7-number code and back to 1 x 20 x 20."""
+The settings every cVAE run in this project shares."""
 
 MD_TRAINING = r"""## 4 Training
 
 The tutorial trains in batches of 1,000 images drawn in a shuffled order. `get_batch` is the
 tutorial's own helper: it moves a batch to the device and turns each label into a **one-hot**
-vector, ten numbers that are all 0 except a 1 at the class.
+vector, ten numbers that are all 0 except a 1 at the class. The second cell below runs one forward
+pass: the printed shapes confirm the adapted model takes a 1 x 20 x 20 image to a 7-number code
+and back to 1 x 20 x 20.
 
 | Call | What you give it | What you get back |
 |---|---|---|
@@ -1855,14 +1856,16 @@ def report_notebook():
                               "(`DigitClassifier.ipynb`, section 3)."),
         code("code-encoder", CELL_ENCODER),
         code("code-decoder", CELL_DECODER),
-        markdown("md-models-2", "The cVAE, the discriminator and the classifier."),
+        markdown("md-models-2", "The cVAE and the discriminator."),
         code("code-cvae", CELL_CVAE),
         code("code-discriminator", CELL_DISCRIMINATOR),
-        markdown("md-models-3", "The classifier, and the helpers that decode images and measure "
-                                "sharpness (`cVAE_DiscriminatorLoss.ipynb`, section 8)."),
+        markdown("md-models-3", "The classifier, and the helpers that decode images "
+                                "(`cVAE_Baseline.ipynb`, section 5.2)."),
         code("code-classifier-model", CELL_CLASSIFIER),
         code("code-sample", CELL_SAMPLE),
-        markdown("md-models-4", "The sharpness measures and the convergence statistic."),
+        markdown("md-models-4", "The sharpness measures (`cVAE_DiscriminatorLoss.ipynb`, "
+                                "section 8) and the convergence statistic (`cVAE_Baseline.ipynb`, "
+                                "section 4.4)."),
         code("code-laplacian", CELL_LAPLACIAN),
         code("code-convergence", CELL_CONVERGENCE),
         markdown("md-load", "## 4 Checkpoints and training records\n\nBoth cVAE files hold one "
@@ -1943,8 +1946,8 @@ def report_notebook():
         code("code-frechet", CELL_MR_FRECHET),
         markdown("md-halves", "The value depends on how many images are compared and in which "
                               "class mix, so every comparison uses halves of equal size and "
-                              "mix, and the real-against-real value is the floor that no "
-                              "model can beat."),
+                              "mix, and the real-against-real value is the floor, the distance "
+                              "a model drawing real digits would score."),
         code("code-halves", CELL_MR_HALVES),
         code("code-fd-rows", CELL_MR_FD_ROWS),
         markdown("md-spread", "## 10 Diversity\n\nMode collapse, a generator producing a few "

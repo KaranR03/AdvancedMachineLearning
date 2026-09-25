@@ -361,7 +361,9 @@ said_epochs = re.search(r"from 0\.001 to 0 over (\d+) epochs", flat)
 check("the report's epoch count is the stored one",
       said_epochs is not None and int(said_epochs.group(1)) == base_h["epochs"],
       f"report {said_epochs.group(1) if said_epochs else '?'}, stored {base_h['epochs']}")
-check("the report names the seeds that were trained", "seeds 0, 1 and 2" in flat)
+# A tie (~) typesets as a space; the list is tied so it does not break after "0,".
+check("the report names the seeds that were trained",
+      "seeds 0, 1 and 2" in flat.replace("~", " "))
 check("the report states the real = 1, fake = 0 convention",
       "real images are labelled 1 and fakes 0" in flat)
 check("the report names the non-saturating generator loss", "non-saturating" in flat)

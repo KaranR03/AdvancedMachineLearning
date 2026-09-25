@@ -99,10 +99,10 @@ Prior work supports it, mostly by eye. Larsen et al.\ (2016) trained a VAE joint
 (VAE/GAN) and found its samples, and its reconstructions of held-out CelebA faces, sharper than a
 plain VAE's. The conditional CVAE-GAN of Bao et al.\ (2017) produced images that ``look realistic
 and clear'' where a CVAE's were blurry. Rosca et al.\ (2017) added adversarial terms to an
-autoencoder ($\alpha$-GAN) and obtained better reconstructions than their autoencoder baseline, but
+autoencoder ($\alpha$-GAN) and obtained better reconstructions than the AGE autoencoder, but
 mixed sample quality. Dosovitskiy and Brox (2016) found that image-space losses
-over-smooth where adversarial ones stay crisp. Those studies change several things at once;
-here the discriminator term is the only change, and sharpness is measured.
+over-smooth, and an added adversarial term sharpens but can invent content. Most of those change
+several things at once; here the discriminator term is the only change, and sharpness is measured.
 
 \section{Methodology}
 \textbf{Baseline cVAE.} Tutorial 8.3's model has a convolutional encoder and a mirrored decoder,
@@ -130,7 +130,7 @@ There, $\lambda$ was chosen from $__SWEEP_RANGE__$ as the value whose reconstruc
 to the real development images' Laplacian variance (__REAL_DEV_SHARP__), excluding runs where $D$ passed 98\%
 accuracy. __SWEEP_SENTENCE__ Training counts as converged when the mean development reconstruction
 loss over the last __WINDOW__ epochs is within 1\% of the previous __WINDOW__; __CONV_SENTENCE__
-The final models were retrained on all __N_REFIT__ images with seeds 0, 1 and 2, and only
+The final models were retrained on all __N_REFIT__ images with seeds 0,~1 and~2; only
 \texttt{main\_report.ipynb} scores the test split.
 
 \section{Experiments}
@@ -147,7 +147,7 @@ features, since Inception-v3 was built for $299\times299$ colour photographs. It
 class-stratified test halves (__HALF_A__ and __HALF_B__ images), so the real-against-real distance
 is a fair floor, and within-class feature spread, generated over real, tests for mode collapse.
 Differences are discriminator loss minus baseline, with 95\% paired bootstrap intervals (2,000
-resamples) at seed 0, repeated at seeds 1 and 2. \textbf{The rule was fixed in advance}: an object
+resamples) at seed 0, repeated at seeds 1 and 2. \textbf{The rule was fixed in advance}: an output
 is sharper if its Laplacian variance rises with an interval above zero and at every seed, and its
 mid-grey fraction falls.
 
@@ -167,7 +167,7 @@ reconstruction loss, with the discriminator's accuracy dashed.}
 \end{figure}
 
 \textbf{Strengths and limitations.} The comparison is controlled: the models share data,
-architecture, optimiser, schedule, seeds and batch order, and each claim rests on paired
+architecture, optimiser, schedule, seeds and batch order, and the verdict rests on paired
 intervals, three seeds and a rule stated in advance. But three seeds bound training variance
 loosely__SEED_SPREAD_CLAUSE__, four values of $\lambda$ sample the trade-off coarsely,
 Laplacian variance also rewards noise, one pixel of blur is a large part of a stroke at
@@ -178,7 +178,7 @@ __SECONDS_ADV__ s against __SECONDS_BASE__ s.
 pixel accuracy, choosing $\lambda$ on held-out data against the real images' own sharpness rather
 than maximising it, which rewards noise; keep the adversarial gradient out of the encoder and
 anneal both optimisers, as here. Before generalising, add seeds, a finer $\lambda$ grid, a
-perceptual measure from a network the models never saw, and natural images.
+perceptual measure from a second, larger network, and natural images.
 
 \section{Conclusion}
 __CONCLUSION__ __CONCLUSION_NEXT__

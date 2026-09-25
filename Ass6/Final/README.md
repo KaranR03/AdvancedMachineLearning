@@ -14,8 +14,8 @@ increases the sharpness of the reconstructed images.
 
 | file | bytes | sha256 |
 |---|---|---|
-| `project6_report.pdf` | 147,890 | `fbf46996e734a419a806292d81d4d42054a1983926a63f6a59d0159c43a04cf7` |
-| `project6_code.zip` | 14,373,186 | `c7e5d6ac34d8b55537592fd11820e7aa53e185612467ed144d1d293d1827bb4f` |
+| `project6_report.pdf` | 147,898 | `5a0e6758d2816a1bf637b8b2a950ee5b064ec29e3ab1b57f24a1d1a52c0d6679` |
+| `project6_code.zip` | 14,373,207 | `e93fe691e2397e598ad5cc1255507d94406216cb8af04795953e31f287004b0e` |
 
 ## Result
 

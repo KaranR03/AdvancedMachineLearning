@@ -106,10 +106,10 @@ Prior work supports it, mostly by eye. Larsen et al.\ (2016) trained a VAE joint
 (VAE/GAN) and found its samples, and its reconstructions of held-out CelebA faces, sharper than a
 plain VAE's. The conditional CVAE-GAN of Bao et al.\ (2017) produced images that ``look realistic
 and clear'' where a CVAE's were blurry. Rosca et al.\ (2017) added adversarial terms to an
-autoencoder ($\alpha$-GAN) and obtained better reconstructions than their autoencoder baseline, but
+autoencoder ($\alpha$-GAN) and obtained better reconstructions than the AGE autoencoder, but
 mixed sample quality. Dosovitskiy and Brox (2016) found that image-space losses
-over-smooth where adversarial ones stay crisp. Those studies change several things at once;
-here the discriminator term is the only change, and sharpness is measured.
+over-smooth, and an added adversarial term sharpens but can invent content. Most of those change
+several things at once; here the discriminator term is the only change, and sharpness is measured.
 
 \section{Methodology}
 \textbf{Baseline cVAE.} Tutorial 8.3's model has a convolutional encoder and a mirrored decoder,
@@ -136,8 +136,8 @@ detached, so only the decoder learns to fool $D$, again as in Larsen et al. $D$ 
 There, $\lambda$ was chosen from $\{0.03, 0.1, 0.3, 1.0\}$ as the value whose reconstructions came closest
 to the real development images' Laplacian variance (0.2311), excluding runs where $D$ passed 98\%
 accuracy. In that order, the four runs' reconstructions scored 0.1466, 0.1732, 0.1909 and 0.1857, with $D$ accuracies of 0.8749, 0.7299, 0.6331 and 0.5997, so $\lambda = 0.3$ was chosen. Training counts as converged when the mean development reconstruction
-loss over the last 10 epochs is within 1\% of the previous 10; both runs meet it (changes of $-$0.0013 and $-$0.0012; Figure~2b).
-The final models were retrained on all 60,000 images with seeds 0, 1 and 2, and only
+loss over the last 10 epochs is within 1\% of the previous 10; both runs meet it (relative changes of $-$0.0013 and $-$0.0012; Figure~2b).
+The final models were retrained on all 60,000 images with seeds 0,~1 and~2; only
 \texttt{main\_report.ipynb} scores the test split.
 
 \section{Experiments}
@@ -154,7 +154,7 @@ features, since Inception-v3 was built for $299\times299$ colour photographs. It
 class-stratified test halves (4,999 and 5,001 images), so the real-against-real distance
 is a fair floor, and within-class feature spread, generated over real, tests for mode collapse.
 Differences are discriminator loss minus baseline, with 95\% paired bootstrap intervals (2,000
-resamples) at seed 0, repeated at seeds 1 and 2. \textbf{The rule was fixed in advance}: an object
+resamples) at seed 0, repeated at seeds 1 and 2. \textbf{The rule was fixed in advance}: an output
 is sharper if its Laplacian variance rises with an interval above zero and at every seed, and its
 mid-grey fraction falls.
 
@@ -168,7 +168,7 @@ handwriting; the within-class spread in Table~1 agrees.
 
 For reconstructions the rule is met: Laplacian variance rises from 0.1184 to 0.1931 (Table~1; Figure~2a), with an interval above zero and differences of $+$0.0728 and $+$0.0810 at seeds 1 and 2, and the mid-grey fraction falls from 0.2084 to 0.1533. Both values remain below the real test images' 0.2277, so the change moves reconstructions toward real sharpness, not past it. The samples meet it too: Laplacian variance rises from 0.1141 to 0.2055 ($+$0.0906 and $+$0.0943 at seeds 1 and 2), and the mid-grey fraction falls from 0.2113 to 0.1469. The price is pixel fidelity: reconstruction MSE rises from 0.01109 to 0.01194, beyond evaluation noise. Pixel error punishes small shifts (Larsen et al.): a crisp stroke slightly misplaced costs more than a blur over both places.
 
-Both models' samples are read as their intended class about as often as real digits are (0.9855 and 0.9875 against 0.9836). In the classifier's feature space the samples' Fréchet distance to real digits falls from 51.32 to 4.81, at every seed (the real-against-real floor is 0.45), and the reconstructions' from 38.62 to 5.71. Within-class spread is 0.640 for the baseline and 0.883 with the discriminator loss (1 matches real variety), so the discriminator's samples are more varied, not less.
+Both models' samples are read as their intended class about as often as real digits are (0.9855 and 0.9875 against 0.9836). In the classifier's feature space the samples' Fréchet distance to real digits falls from 51.32 to 4.81, at every seed (the real-against-real floor is 0.45), and the reconstructions' from 38.62 to 5.71. Within-class spread is 0.640 for the baseline and 0.883 with the discriminator loss (1 matches real variety), so samples with the discriminator loss are more varied, not less.
 
 \setcounter{figure}{1}
 \begin{figure}[t]
@@ -179,7 +179,7 @@ reconstruction loss, with the discriminator's accuracy dashed.}
 \end{figure}
 
 \textbf{Strengths and limitations.} The comparison is controlled: the models share data,
-architecture, optimiser, schedule, seeds and batch order, and each claim rests on paired
+architecture, optimiser, schedule, seeds and batch order, and the verdict rests on paired
 intervals, three seeds and a rule stated in advance. But three seeds bound training variance
 loosely (the MSE cost ranges from $+$0.00067 to $+$0.00238 across seeds), four values of $\lambda$ sample the trade-off coarsely,
 Laplacian variance also rewards noise, one pixel of blur is a large part of a stroke at
@@ -190,7 +190,7 @@ $20\times20$, and the Fr\'echet distance uses one small classifier's features. T
 pixel accuracy, choosing $\lambda$ on held-out data against the real images' own sharpness rather
 than maximising it, which rewards noise; keep the adversarial gradient out of the encoder and
 anneal both optimisers, as here. Before generalising, add seeds, a finer $\lambda$ grid, a
-perceptual measure from a network the models never saw, and natural images.
+perceptual measure from a second, larger network, and natural images.
 
 \section{Conclusion}
 The evidence supports the hypothesis: under a rule fixed before the results, adding a discriminator term made both the reconstructions and the samples of a cVAE measurably sharper, consistently across three training seeds. Pixel error rose slightly, class consistency was unchanged and variety grew. Next, Larsen et al.'s shift-tolerant, feature-wise reconstruction loss would test whether the remaining blur comes from pixel MSE itself.
