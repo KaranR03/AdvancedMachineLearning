@@ -12,6 +12,7 @@ and asserted here too.
 
 Run:  python tools/verify.py
 """
+import ast
 import hashlib
 import io
 import json
@@ -214,6 +215,12 @@ body = re.sub(r"\\includegraphics\[[^]]*\]", "", body)
 body = re.sub(r"\\(vspace|setcounter|documentclass|usepackage|hfill)\{?[^}]*\}?", "", body)
 body = re.sub(r"\[\d+pt\]", "", body)
 body = re.sub(r"0\.98\\textwidth", "", body)
+# The same text with every run of whitespace collapsed. Checks that look for a phrase use this;
+# checks that need paragraph boundaries, such as the numeral-opening sweep below, use `body`.
+# A line break in the .tex is an artefact of where the generator's source string wrapped, and it
+# moves whenever a sentence is edited, so a phrase rail reading the raw body reports "absent" on
+# a sentence that is present and stops testing anything.
+flat = re.sub(r"\s+", " ", body)
 numbers = set(re.findall(r"\d+\.\d+", body))
 # Values named by the task or the page geometry rather than measured by the notebook.
 DESIGN = {"0.78", "0.95", "0.5", "1.5", "0.9", "0.8", "0.6", "0.06", "0.94", "0.75", "0.98"}
@@ -357,6 +364,331 @@ for figure, placed in PLACED.items():
           rendered_pt >= 6.0,
           f"{smallest:g}pt authored at {native:.2f}in placed at {placed:.2f}in "
           f"renders {rendered_pt:.1f}pt")
+
+# ---------------------------------------------------------------- 9. the fourth pass
+# The report says the workshop's training loop was inherited and "only the changes described
+# below differ". Three settings do differ, and for three passes none of them was described: a
+# sentence can be true of everything it mentions and still leave the reader unable to check the
+# run. These rails make the description itself a requirement.
+print("\n9. The training configuration the report describes")
+method = body.split(r"\section{Method description}", 1)[1].split(r"\section{Results", 1)[0]
+for token in ("epochs", "cosine", "Batch size"):
+    check(f"the method section states the {token} used", token in method)
+
+# Epochs is read back from the stored curves rather than trusted: the validation history has one
+# entry per epoch, and it is the file main_report.ipynb plots, so a re-run with a different
+# schedule changes the number the sentence has to carry.
+epoch_counts = {}
+for mode in ("Forward", "Reverse"):
+    curve = json.load(io.open(f"{NBDIR}/LLM{mode}_history.json", encoding="utf-8"))["val_seq"]
+    epoch_counts[mode] = len(curve)
+stated_epochs = re.search(r"(\d+) epochs rather than", method)
+check("the epoch count in the report is the number of epochs actually trained",
+      stated_epochs is not None
+      and {int(stated_epochs.group(1))} == set(epoch_counts.values()),
+      f"report {stated_epochs.group(1) if stated_epochs else '?'}, history {epoch_counts}")
+
+# Batch size and epochs are design constants, so the traceability sweep over decimals cannot
+# reach them. main_report.ipynb prints both, which is what lets them be checked the same way
+# every other number in the report is: against what the notebook said.
+printed_training = re.search(r"training: (\d+) epochs, batch size (\d+)", main)
+stated_batch = re.search(r"Batch size stays\s+at (\d+)", method)
+check("the batch size the report names is the one main_report.ipynb printed",
+      printed_training is not None and stated_batch is not None
+      and printed_training.group(2) == stated_batch.group(1),
+      f"report {stated_batch.group(1) if stated_batch else '?'}, "
+      f"notebook {printed_training.group(2) if printed_training else '?'}")
+check("the epoch count the report names is the one main_report.ipynb printed",
+      printed_training is not None and stated_epochs is not None
+      and printed_training.group(1) == stated_epochs.group(1),
+      f"report {stated_epochs.group(1) if stated_epochs else '?'}, "
+      f"notebook {printed_training.group(1) if printed_training else '?'}")
+
+# A comment claimed dropout 0.1 was "rather than the class default of 0.5". 0.5 is the WORKSHOP
+# class's default, and that class also hard-codes 0.1 inside its encoder layer; the class in
+# these notebooks declares 0.1 and passes one value to both. Nothing tested the comment against
+# the class three lines below it, so this tests the thing the comment was about instead: every
+# construction agrees with the declaration, in every notebook that builds a model.
+print("\n10. Dropout is one value, declared and passed consistently")
+for name in NOTEBOOKS:
+    src = sources[name]
+    declared = re.search(r"def __init__\(self, ntoken[^)]*dropout=([\d.]+)\)", src)
+    calls = re.findall(r"TransformerModel\([^)]*?dropout=([\d.]+)", src)
+    check(f"{name}: every TransformerModel call passes the declared default",
+          declared is not None and calls and all(c == declared.group(1) for c in calls),
+          f"declared {declared.group(1) if declared else '?'}, "
+          f"{len(calls)} call(s) {sorted(set(calls))}")
+    check(f"{name}: no comment names a dropout default the class does not declare",
+          "class default of 0.5" not in src)
+
+# Prose that reads wrong without being wrong. "the figures reproduce exactly" sits on a page
+# holding Figure 1 and Figure 2; a paragraph opening with a numeral reads as a list item. The
+# figure paths have to come out first, or "figures/figure_1_overview.pdf" fails the first rail.
+print("\n11. Prose that a number check cannot see")
+clean = re.sub(r"figures/\S+", "", prose)
+check('the report says "numbers" rather than "figures" for what reproduces',
+      not re.search(r"\bfigures\b", clean), "figures/ paths excluded")
+
+# Commands and inline maths go before sentence boundaries are found: \texttt{50-73=} would
+# otherwise look like a sentence and $p = 1.212 \times 10^{-7}$ like several.
+sentences = re.sub(r"\$[^$]*\$", " ", clean)
+sentences = re.sub(r"\\[A-Za-z]+\*?(?:\[[^]]*\])?(?:\{[^{}]*\})?", " ", sentences)
+opens_numeric = []
+for para in re.split(r"\n\s*\n", sentences):
+    para = re.sub(r"\s+", " ", para).strip()
+    if not para:
+        continue
+    if re.match(r"\d", para):
+        opens_numeric.append(para[:40])
+    opens_numeric += [m.group(1) for m in re.finditer(r"[.!?]\s+(\d[\d.,]*)", para)]
+check("no sentence in the report opens with a numeral", not opens_numeric, f"{opens_numeric}")
+
+# Figure 1's centre and right panels plot error counts rather than rates, and the caption gives
+# the reason: every accuracy they could have shown instead is above 0.98, so the bars would be
+# indistinguishable. 0.98 is in the DESIGN set above, so the traceability sweep steps over it and
+# nothing else reads it. This does: every accuracy those two panels cover, out of the notebook,
+# smallest first. A guard rather than a finding -- the claim holds comfortably on this run -- kept
+# so that a future run which drags one split under the stated floor has to restate the caption.
+carry_rows = re.findall(r"^\s*(?:with_carry|no_carry|with_borrow|no_borrow)\s*\|\s*\d+\s*\|"
+                        r"\s*\d+\s*\|\s*([\d.]+)\s*\|\s*\d+\s*\|\s*([\d.]+)\s*$", main, re.M)
+place_rows = re.findall(r"^\s*(?:thousands|hundreds|tens|units|sign)\s*\|\s*\d+\s*\|"
+                        r"\s*([\d.]+)\s*\|\s*([\d.]+)\s*$", main, re.M)
+panel_acc = [float(v) for row in carry_rows + place_rows for v in row]
+said_floor = re.search(r"every accuracy here exceeds ([\d.]+)", flat)
+check("the accuracy floor the Figure 1 caption gives is true of every split it covers",
+      said_floor is not None and panel_acc
+      and min(panel_acc) > float(said_floor.group(1)),
+      f"caption says above {said_floor.group(1) if said_floor else '?'}, "
+      f"smallest of {len(panel_acc)} is {min(panel_acc) if panel_acc else '?'}")
+
+# The barrier sentence explains the reduced reverse run's failure to converge by the barrier it
+# has just described. One run of one seed cannot carry "which is also why": the limitations
+# paragraph says as much two columns later, calling the convergence difference a single
+# observation. The sentence is allowed to offer the explanation, not to assert it.
+check("the barrier sentence offers its explanation rather than asserting it",
+      "which is also why" not in flat, "hedged as 'which would also explain why'")
+
+# The strengths paragraph lists what the two models hold in common, which is what makes direction
+# the only variable. The training data belongs on that list -- same seed, same split sizes, so
+# literally the same 150,000 prompts, with only the target string reversed -- and it is the
+# strongest item on it. Written as an equivalence: the report claims it exactly when the two
+# notebooks really do agree, so a future divergence deletes the claim rather than outliving it.
+strengths = flat.split(r"\section{Strengths", 1)[-1]
+shared = {}
+for name in ("LLMForward.ipynb", "LLMReverse.ipynb"):
+    seed = re.search(r"SEED\s*=\s*(\d+)", sources[name])
+    split = re.search(r"train_size,\s*val_size,\s*test_size\s*=\s*([\d,\s]+)", sources[name])
+    shared[name] = (seed.group(1) if seed else "?",
+                    re.sub(r"\s+", " ", split.group(1)).strip() if split else "?")
+same_data = len(set(shared.values())) == 1 and "?" not in shared["LLMForward.ipynb"]
+check("the report names training data among the shared settings exactly when it is shared",
+      ("training data" in strengths) == same_data,
+      f"Forward {shared['LLMForward.ipynb']}, Reverse {shared['LLMReverse.ipynb']}")
+
+# The barrier sentence names a flat phase, the epoch it ends and the two thresholds crossed
+# after it. All four come out of the stored curve in build_report.py, so they are re-derived
+# here from the same file, independently, and compared with what the sentence says. "below a
+# quarter" is read strictly: the peak before the rise must really be under a quarter of final.
+print("\n12. The barrier sentence against the curve it describes")
+rev = json.load(io.open(f"{NBDIR}/LLMReverse_history.json", encoding="utf-8"))["val_seq"]
+crossed = {t: next((i + 1 for i, v in enumerate(rev) if v >= t), None) for t in (0.78, 0.95)}
+said_epochs = re.search(r"passes 0\.78 at epoch (\d+) and 0\.95 at epoch (\d+)", body)
+check("the epochs the barrier sentence names are the reverse curve's own crossings",
+      said_epochs is not None
+      and [int(g) for g in said_epochs.groups()] == [crossed[0.78], crossed[0.95]],
+      f"curve {crossed[0.78]}/{crossed[0.95]}, "
+      f"report {list(said_epochs.groups()) if said_epochs else '?'}")
+FLAT_WORDS = {"a tenth": 0.10, "a quarter": 0.25}
+said_flat = re.search(r"stays below (a tenth|a quarter) of its final accuracy through epoch "
+                      r"(\d+)", body)
+flat_ratio = max(rev[:crossed[0.78] - 1]) / rev[-1] if crossed[0.78] else 1.0
+check("the flat phase the barrier sentence describes is true of the curve",
+      said_flat is not None
+      and flat_ratio < FLAT_WORDS[said_flat.group(1)]
+      and int(said_flat.group(2)) == crossed[0.78] - 1,
+      f"peak before the rise is {flat_ratio:.3f} of final, "
+      f"report says below {said_flat.group(1) if said_flat else '?'} "
+      f"through epoch {said_flat.group(2) if said_flat else '?'}")
+
+# The closing recommendation makes three claims about the direction it picks, and two of them are
+# measurements sitting a column earlier in the same report: how fast it converged, and what its
+# worst group of examples costs it. Both are re-read here from the notebook rather than trusted,
+# because a sentence that recommends something on the strength of a number is the sentence a
+# reader checks first.
+full_95 = {}
+for mode in ("Forward", "Reverse"):
+    rows = re.findall(rf"^\s*{mode}\s*\|\s*(\d+)\s*\|\s*\S+\s*\|\s*(\S+)\s*\|\s*[\d.]+\s*$",
+                      main, re.M)
+    rows.sort(key=lambda r: -int(r[0]))          # the full training set is the larger one
+    full_95[mode] = rows[0][1] if rows else "?"
+picked = re.search(r"choose (Forward|Reverse):", flat)
+other = {"Forward": "Reverse", "Reverse": "Forward"}.get(picked.group(1)) if picked else None
+faster = (picked is not None and full_95[picked.group(1)].isdigit() and full_95[other].isdigit()
+          and int(full_95[picked.group(1)]) < int(full_95[other]))
+check("the recommendation claims faster convergence only when the curves show it",
+      ("converges in fewer epochs" in flat) == faster,
+      f"0.95 at epoch {full_95['Forward']} Forward, {full_95['Reverse']} Reverse; "
+      f"report picks {picked.group(1) if picked else '?'}")
+
+# Both models concentrate their errors in a group of 92 examples, and they are different groups of
+# 92: Forward's single-digit answers, Reverse's two-digit width mismatch. Equal denominators mean
+# the two error counts are the whole comparison, so the recommendation states them and this reads
+# both back out of the tables that printed them.
+len1_row = re.search(r"^\s*1 digit\s*\|\s*\d+\s*\|\s*(\d+)\s*\|\s*\d+\s*$", main, re.M)
+width = {}
+for m in re.finditer(r"^\s*(-?\d+)\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*[\d.]+\s*\|\s*(\d+)\s*\|"
+                     r"\s*[\d.]+\s*$", main, re.M):
+    width[int(m.group(1))] = m.group(2)
+hardest = re.search(r"its hardest case costs it (\d+) errors where (?:Forward|Reverse)'s "
+                    r"costs (\d+)", flat)
+expected = ([len1_row.group(1), width[max(width)]] if len1_row and width else None)
+check("the two error counts the recommendation compares are the printed ones",
+      hardest is not None and expected is not None and list(hardest.groups()) == expected,
+      f"notebook {expected}, report {list(hardest.groups()) if hardest else 'sentence absent'}")
+
+# ---------------------------------------------------------------- 13. nothing defined for show
+# V14 deleted overall_counts() because it was defined and never called. evaluate() and
+# get_batch() survived that pass for fidelity to the workshop, which is not a reason a reader of
+# this notebook can act on: a function with no caller is a question the code does not answer.
+# They are called now. This rail is what stops the next one from accumulating.
+print("\n13. Every function in main_report.ipynb has a caller")
+main_code = "\n".join("".join(c["source"]) for c in notebooks["main_report.ipynb"]["cells"]
+                      if c["cell_type"] == "code")
+# Over the syntax tree rather than by regex, because two of these functions are handed to a loop
+# as values and never written with parentheses after them: searching for "name(" calls those dead
+# when they are not. In the tree both uses are a Name node, and a method called on an object is
+# an Attribute, which is how the tokenizer's own methods are reached.
+tree = ast.parse(main_code)
+CALLED_BY_TORCH = {"forward", "__init__"}   # invoked by nn.Module, never by name here
+defined = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)} - CALLED_BY_TORCH
+referenced = ({n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+              | {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)})
+dead = sorted(defined - referenced)
+check("no function is defined without being used", not dead,
+      f"{len(defined)} functions, dead: {dead}")
+
+# ---------------------------------------------------------------- 14. two ways of scoring agree
+# The notebook now scores the same predictions twice: over tokens, as the workshop did, and over
+# integers, as Task 3 asks. They answer the same question, so a disagreement is a bug in one of
+# them, and the report's claim that they match must not outlive the measurement of it.
+print("\n14. Token-level scoring beside integer-level scoring")
+agreements = []
+token_rates = []
+for mode in ("Forward", "Reverse"):
+    token = re.search(rf"^token level \|\s*{mode}\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|"
+                      rf"\s*([\d.]+)\s*$", main, re.M)
+    overall = re.search(rf"^\s*{mode}\s*\|\s*overall\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*([\d.]+)",
+                        main, re.M)
+    check(f"{mode}: the workshop's token-level measure is reported", token is not None,
+          f"digit {token.group(1)}, sequence {token.group(2)}" if token else "")
+    token_rates.append(token.group(1) if token else "?")
+    same = token is not None and overall is not None and token.group(2) == overall.group(1)
+    agreements.append(same)
+    check(f"{mode}: token-level sequence accuracy equals the integer-level accuracy", same,
+          f"tokens {token.group(2) if token else '?'}, "
+          f"integers {overall.group(1) if overall else '?'}")
+check("the report claims the two scorings match only when they do",
+      ("sequence accuracy reproduces the overall rates exactly" in body) == all(agreements),
+      f"agree {agreements}")
+
+# The sentence carrying these two rates follows one that pairs its numbers as addition and
+# subtraction, so an unlabelled pair inherits that reading and is then wrong. Naming the models
+# is the fix; this is what keeps the labels attached to the right numbers.
+named = re.search(r"digit accuracy is ([\d.]+) for Forward and ([\d.]+) for Reverse", flat)
+check("the token-level sentence names which model each rate belongs to",
+      named is not None and list(named.groups()) == token_rates,
+      f"notebook {token_rates}, report "
+      f"{list(named.groups()) if named else 'the pair is unlabelled'}")
+
+# --------------------------------------------- 15. floats, step counts, and two ways to count
+print("\n15. Every float is cited, and the two place-value counts reconcile")
+
+# A numbered float the prose never points at is a float the reader meets without being told why
+# it is there. Two things make the numbering non-obvious. Figure 1 is hand-lettered inside the
+# title block rather than floated, so the figure counter is pushed past it and the first real
+# figure is Figure 2; and that counter has to be read from `tex`, because section 6 strips
+# \setcounter out of `body` with the rest of the layout macros. A citation is required to carry
+# the unbreakable space, which every genuine cross-reference here uses and the hand-lettered
+# label does not, so the label cannot be mistaken for the prose citing itself.
+prose = re.sub(r"\\begin\{(table|figure)\*?\}.*?\\end\{\1\*?\}", " ", body, flags=re.S)
+prose = re.sub(r"\s+", " ", prose)
+offset = re.search(r"\\setcounter\{figure\}\{(\d+)\}", tex)
+floats = []
+for kind, first in (("figure", int(offset.group(1)) + 1 if offset else 1), ("table", 1)):
+    for n, _ in enumerate(re.finditer(r"\\begin\{" + kind + r"\*?\}", body), start=first):
+        floats.append((kind.capitalize(), n))
+uncited = [f"{k} {n}" for k, n in floats if f"{k}~{n}" not in prose]
+check("every numbered float is cited in the prose", not uncited,
+      f"uncited: {uncited}" if uncited else "cited: " + ", ".join(f"{k} {n}" for k, n in floats))
+
+# The ablation sentence says the two training-set sizes agree once measured in optimiser updates.
+# When the two counts really are the same number, printing it twice with "against" between them
+# reads as a slip rather than as the agreement the sentence is about. Written as an equivalence so
+# that a run where the counts differ gets the two numbers back instead of a false "either set".
+steps = re.search(r"passes 0\.95 after ([\d,]+) updates on (either set|the reduced set "
+                  r"against ([\d,]+) on the full one)", flat)
+if steps is None:
+    check("the ablation sentence states the matched update count", False, "sentence not found")
+else:
+    equal_counts = steps.group(3) is None or steps.group(1) == steps.group(3)
+    check("the sentence says 'either set' exactly when the two update counts are equal",
+          (steps.group(2) == "either set") == equal_counts, f"reads {steps.group(0)[:72]!r}")
+
+# Two counts of the same place value, both correct under their own definition, and the only thing
+# holding them apart is a clause in the prose. Figure 1's third panel plots wrong digits from the
+# per-place accuracy, which marks a place wrong when a short prediction cannot supply it at all.
+# The sentence in Error patterns counts only errors that kept the right number of digits, which is
+# why it reports a smaller number for the same place. The gap can never be negative and can never
+# exceed the wrong-length errors; if it ever does, the qualifying clause has stopped being true
+# and the figure and the sentence contradict each other in front of the reader.
+places = re.search(r"Reverse wrong places \(0 = units\): \{([^}]*)\}", main)
+rev_places = dict(re.findall(r"'([^']+)':\s*(\d+)", places.group(1))) if places else {}
+tens_row = re.search(r"^\s*tens\s*\|\s*(\d+)\s*\|\s*[\d.]+\s*\|\s*([\d.]+)\s*$", main, re.M)
+said = re.search(r"right number of digits, (\d+) are wrong at the tens digit", flat)
+saidlen = re.search(r"(\d+) predictions have the wrong length", flat)
+if tens_row and said and saidlen and "wrong length" in rev_places:
+    # Reconstructed from an accuracy printed to four places, so allow one for the rounding.
+    panel = round((1 - float(tens_row.group(2))) * int(tens_row.group(1)))
+    low = int(said.group(1))
+    check("the figure's wrong-digit count at the tens reconciles with the sentence's",
+          low - 1 <= panel <= low + int(saidlen.group(1)) + 1,
+          f"figure {panel}, sentence {low}, wrong-length {saidlen.group(1)}")
+else:
+    check("the figure's wrong-digit count at the tens reconciles with the sentence's", False,
+          "could not read one of the three numbers")
+
+# The same sentence's subset cannot be larger than the population it is drawn from: the errors
+# that kept the right number of digits are the total errors less the wrong-length ones.
+total_rev = re.search(r"Of Reverse's (\d+) errors", flat)
+if total_rev and said and saidlen:
+    right_length = int(total_rev.group(1)) - int(saidlen.group(1))
+    check("the tens-slip count does not exceed the right-length errors it is drawn from",
+          int(said.group(1)) <= right_length,
+          f"{said.group(1)} of {right_length} right-length errors")
+else:
+    check("the tens-slip count does not exceed the right-length errors it is drawn from", False,
+          "could not read the error totals")
+
+# The Set-up paragraph says the validation split only tracks convergence and that no model is
+# selected on it. That is a claim about what the training notebooks do, and it is the claim a
+# marker working from the unit's own deduction list checks when it asks whether results were
+# reported after fitting the best model on training plus validation. Written as an equivalence:
+# the sentence stands exactly while both notebooks still train for a fixed schedule and save the
+# final weights unconditionally. Introduce early stopping or a best-checkpoint rule and the
+# sentence has to go, rather than quietly becoming false.
+selection = {}
+for name in ("LLMForward.ipynb", "LLMReverse.ipynb"):
+    code = sources[name]
+    selection[name] = (
+        re.search(r"\bbest[_a-z]*\s*=", code) is None          # no running best to compare against
+        and "patience" not in code                             # no early-stopping counter
+        and not re.search(r"early[_ ]?stop", code, re.I)
+        and len(re.findall(r"torch\.save\(", code)) == 1       # one save, not one per improvement
+        and re.search(r"if[^\n]*val[^\n]*:\s*\n\s*torch\.save", code) is None)  # and unconditional
+no_selection = all(selection.values())
+check("the report says nothing is selected on validation exactly when nothing is",
+      ("no model is selected on it" in flat) == no_selection,
+      f"Forward {selection['LLMForward.ipynb']}, Reverse {selection['LLMReverse.ipynb']}")
 
 print("\n" + ("ALL CHECKS PASSED" if not failures
              else f"{len(failures)} CHECK(S) FAILED: " + "; ".join(failures)))

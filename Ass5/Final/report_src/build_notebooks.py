@@ -417,9 +417,13 @@ learning_rate = 1e-3
 epochs = __EPOCHS__
 batch_size = 100
 
-# dropout 0.1 rather than the class default of 0.5: the workshop's own encoder layer uses 0.1,
-# and the add-and-subtract task needs the capacity. The cosine schedule anneals the learning
-# rate to near zero by the last epoch, which is what settles the final digit accuracy.
+# The workshop's class splits dropout in two: the 0.5 in its signature reaches the positional
+# encoding, while its encoder layer is built with a hard-coded 0.1. Here a single value reaches
+# both, and it is passed explicitly at every call site so the model that is trained and the model
+# rebuilt from the checkpoint are identical. 0.1 rather than 0.5 because a prompt and its answer
+# together are barely a dozen tokens, and dropping half the embedding at that length costs more
+# signal than it regularises. The cosine schedule anneals the learning rate to near zero by the
+# last epoch, which is what settles the final digit accuracy.
 torch.manual_seed(SEED)
 model = TransformerModel(ntoken=ntokens, ninp=128, nhead=16, nhid=64, nlayers=6, dropout=0.1)
 model.to(device)
@@ -591,7 +595,9 @@ def load_model(path):
 
 forward_model = load_model("LLMForward.pth")
 reverse_model = load_model("LLMReverse.pth")
+n_parameters = sum(p.numel() for p in forward_model.parameters())
 print("loaded LLMForward.pth and LLMReverse.pth")
+print(f"both models have the same architecture, {n_parameters:,} parameters each")
 '''
 
 CELL_MR_PREDICT = '''\
@@ -670,6 +676,34 @@ for name in ["Forward", "Reverse"]:
     assert results_table[(name, "overall")][2] > __TARGET__, f"{name} is below the target"
 print(f"\\nboth models exceed the __TARGET__ target on the held-out set")
 '''
+
+CELL_MR_TOKENS = '''\
+# evaluate() is the measure the workshop trained against: it compares the generated answer
+# position by position and counts a sequence correct only when every position matches. Task 3
+# asks whether the number is right, which is what the table above reports. These are two
+# different questions about the same predictions and they should very nearly agree, because a
+# token sequence that matches everywhere decodes to the same integer. They need not agree
+# exactly: a prediction that runs past the end of its target fails the token test and can still
+# parse to the right number. The gap below is what says how often that happened, and a gap of
+# zero means every sequence one definition accepted the other accepted too. The digit rate is
+# the part the integer view cannot show, which is how much of a wrong answer was still right.
+print(f"{'token level':>11} | {'mode':>8} | {'digit':>9} | {'sequence':>9} | {'numeric':>9}")
+gaps = []
+for name, model, reverse in [("Forward", forward_model, False),
+                             ("Reverse", reverse_model, True)]:
+    digit_accuracy, sequence_accuracy = evaluate(model, data_test, reverse)
+    numeric_accuracy = results_table[(name, "overall")][2]
+    gaps.append(abs(sequence_accuracy - numeric_accuracy))
+    print(f"{'token level':>11} | {name:>8} | {digit_accuracy:>9.4f} | "
+          f"{sequence_accuracy:>9.4f} | {numeric_accuracy:>9.4f}")
+
+# A scoring mistake, the reverse flag handed to the wrong model for instance, would move these
+# two definitions apart by far more than the handful of examples they can legitimately differ
+# on, so the tolerance is loose enough to be about bugs rather than about definitions.
+assert max(gaps) < 0.005, f"token and integer scoring disagree by {max(gaps):.4f}"
+print(f"largest gap between token-level and integer-level sequence accuracy: {max(gaps):.4f}")
+'''
+
 
 CELL_MR_MCNEMAR = '''\
 # Does direction change accuracy? The two models answered identical examples, so the paired
@@ -929,6 +963,13 @@ for (mode, size), history in histories.items():
 train_batch_size = __BATCH__
 batches_per_epoch = {"_full": __TRAIN__ // train_batch_size,
                      "_80k": __ABLATION__ // train_batch_size}
+# Both directions have to have been trained over the same number of epochs, or the epoch axis
+# the rows above compare them on is not a single axis. The count comes from the curves
+# themselves, one entry per epoch, rather than from anything typed here.
+epochs_trained = {mode: len(histories[(mode, "_full")]["val_seq"])
+                  for mode in ["Forward", "Reverse"]}
+assert len(set(epochs_trained.values())) == 1, f"epochs differ: {epochs_trained}"
+print(f"training: {epochs_trained['Forward']} epochs, batch size {train_batch_size}")
 for (mode, size), row in curve_rows.items():
     epoch_at_95 = row[1]
     steps = epoch_at_95 * batches_per_epoch[size] if epoch_at_95 is not None else None
@@ -947,7 +988,7 @@ __PALETTE__
 # near 6.7 pt, which is the smallest that stays comfortable beside 10 pt body text. The height
 # is kept tight because this figure spans both columns, so every inch of it costs two inches
 # of text.
-fig, axes = plt.subplots(1, 3, figsize=(10.5, 2.6), dpi=150)
+fig, axes = plt.subplots(1, 3, figsize=(10.5, 2.5), dpi=150)
 
 # Left panel: convergence. Solid is the full training set, dashed the reduced one.
 ax = axes[0]
@@ -1223,7 +1264,7 @@ def build_main_report():
              "It does **not** train: it loads the two checkpoints, the shared held-out test set "
              "and the training histories, then compares the Forward and Reverse models across "
              "operations, digit positions, carry and borrow cases, answer length and error kind."
-             "\n\nRun it top to bottom. It takes about a minute on CPU.")
+             "\n\nRun it top to bottom. It takes a minute or two on CPU, seconds on a GPU.")
     cells = [markdown("md-title", fill(HEADER, __TITLE__="main_report", __INTRO__=intro))]
     for cell_id, source in SHARED:
         cells.append(markdown(cell_id, source) if cell_id.startswith("md-")
@@ -1254,6 +1295,14 @@ def build_main_report():
                                "answer, so a model that looks strong overall can still be "
                                "carrying most of its errors on one side."),
         code("code-overall", fill(CELL_MR_OVERALL)),
+        markdown("md-tokens", "## The same predictions scored over tokens\n\nThe workshop "
+                              "scored this task position by position over the answer's "
+                              "tokens, counting a sequence correct only when every position "
+                              "matched. Task 3 scores the integer instead. Both are reported "
+                              "here, because they ask the same question and should very nearly "
+                              "agree, and because the digit rate is the finer view of how "
+                              "wrong a wrong answer was."),
+        code("code-tokens", fill(CELL_MR_TOKENS)),
         markdown("md-mcnemar", "## Direction effects: a paired test\n\nComparing two "
                                "accuracies measured on the same examples is not the same as "
                                "comparing two independent samples. The pairing removes the "

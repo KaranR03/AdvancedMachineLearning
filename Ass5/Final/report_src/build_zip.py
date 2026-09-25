@@ -56,7 +56,7 @@ CONTENTS
 HOW TO RUN
   Unzip everything into one folder and run main_report.ipynb top to bottom. It needs no
   arguments and no data beyond what is in this archive: about ten seconds on the GPU node, or
-  about a minute on a CPU.
+  a minute or two on a CPU.
 
   The two training notebooks reproduce the checkpoints from scratch. Thirty epochs on the
   full training set took about seventeen minutes on the IFN680 GPU node, and each notebook

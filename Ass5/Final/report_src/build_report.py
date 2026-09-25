@@ -156,6 +156,29 @@ V["rev_wronglen"] = str(places["Reverse"].get("wrong length", 0))
 V["fwd_offby1"] = grab(rf"Forward\s+errors off by exactly 1: {INT}", "forward off by one")
 V["rev_offby1"] = grab(rf"Reverse\s+errors off by exactly 1: {INT}", "reverse off by one")
 
+# The two training settings the report has to name. main_report.ipynb prints both, so they
+# come out of stdout like everything else; the curves are read here as well, because the epoch
+# count has to agree with how many entries they actually hold.
+V["epochs"], V["train_batch"] = grab(rf"training: {INT} epochs, batch size {INT}",
+                                     "epochs and batch size")
+HISTORIES = {mode: json.load(io.open(f"{NBDIR}/LLM{mode}_history.json", encoding="utf-8"))
+             for mode in ("Forward", "Reverse")}
+EPOCH_COUNTS = {mode: len(h["val_seq"]) for mode, h in HISTORIES.items()}
+assert {int(V["epochs"])} == set(EPOCH_COUNTS.values()), (
+    f"main_report says {V['epochs']} epochs, the curves hold {EPOCH_COUNTS}")
+
+# Token-level accuracy, the workshop's measure. The two definitions can legitimately differ by
+# a few examples, so the clause claiming they match is only written when the gap is zero.
+for mode in ("Forward", "Reverse"):
+    digit, sequence, numeric = grab(
+        rf"^token level \|\s*{mode}\s*\|\s*{NUM}\s*\|\s*{NUM}\s*\|\s*{NUM}\s*$",
+        f"{mode} token-level row")
+    V[f"token_digit_{mode.lower()}"] = digit
+    V[f"token_seq_{mode.lower()}"] = sequence
+TOKEN_GAP = grab(r"integer-level sequence accuracy: ([\d.]+)", "token to integer gap")
+V["token_match_clause"] = (", and sequence accuracy reproduces the overall rates exactly"
+                           if float(TOKEN_GAP) == 0 else "")
+
 # ------------------------------------------------------------------------ learning curves
 for mode in ("Forward", "Reverse"):
     rows = re.findall(rf"^\s*{mode}\s*\|\s*{INT}\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|\s*{NUM}\s*$",
@@ -224,11 +247,11 @@ if REACHED:
             f"{V['curve_forward_full_final']} and {V['curve_reverse_full_final']} "
             "(Figure~1, left).")
 else:
-    LEAD = ("Training-set size is the second axis. At "
-            f"{V['curve_forward_small_size']} examples the two orderings finish at "
-            f"{V['curve_forward_small_final']} and {V['curve_reverse_small_final']} final "
-            f"validation sequence accuracy, against {V['curve_forward_full_final']} and "
-            f"{V['curve_reverse_full_final']} on the full set (Figure~1, left).")
+    LEAD = ("At "
+            f"{V['curve_forward_small_size']} examples the two orderings finish at a final "
+            f"validation sequence accuracy of {V['curve_forward_small_final']} and "
+            f"{V['curve_reverse_small_final']}, against {V['curve_forward_full_final']} and "
+            f"{V['curve_reverse_full_final']} on the full set.")
 if max(GAP_F, GAP_R) < 0.01 and SLOWER and SAME_STEPS:
     TAIL = (" What the smaller set costs is epochs rather than final accuracy, and those epochs "
             "are an artefact of its size: both orderings pass 0.95 after "
@@ -237,10 +260,16 @@ if max(GAP_F, GAP_R) < 0.01 and SLOWER and SAME_STEPS:
             "full one. Measured in updates rather than passes, the two training set sizes are "
             "indistinguishable, and data volume is not what separates the two orderings.")
 elif PART_STEPS:
+    # steps_close admits a tolerance, so the two counts can be close without being the
+    # same number. "On either set" is only true when they are identical; when they are merely
+    # near, the two figures are printed and the reader can see how near.
+    MATCH_CLAUSE = (f"{V['matched_small']} updates on either set"
+                    if V["matched_small"] == V["matched_full"] else
+                    f"{V['matched_small']} updates on the reduced set against "
+                    f"{V['matched_full']} on the full one")
     TAIL = (f" The two set sizes are not comparable in epochs, but in optimiser updates "
-            f"they agree: {MATCHED} passes 0.95 after "
-            f"{V['matched_small']} updates on the reduced set against {V['matched_full']} on the "
-            f"full one. {OTHER} does not reach 0.95 on the reduced set within the epochs run, "
+            f"they agree: {MATCHED} passes 0.95 after {MATCH_CLAUSE}. "
+            f"{OTHER} never reaches 0.95 on the reduced set, "
             "which is what a shorter run looks like as much as a smaller one.")
 elif max(GAP_F, GAP_R) < 0.01 and SLOWER:
     TAIL = (" What the smaller set costs is epochs rather than final accuracy, and it costs "
@@ -260,8 +289,8 @@ V["data_efficiency"] = LEAD + TAIL
 # written when there is a gap for it to qualify.
 if SAME_STEPS or PART_STEPS:
     V["ablation_caveat"] = (
-        " The ablation also held epochs fixed instead of optimiser updates, so a design that "
-        "fixes updates would test data volume more directly than this one does.")
+        " The ablation also held epochs fixed instead of optimiser updates, so fixing "
+        "updates would test data volume more directly.")
 elif max(GAP_F, GAP_R) >= 0.01 or SLOWER:
     V["ablation_caveat"] = (
         " The reduced-data runs also take fewer optimiser updates at the same epoch count, so "
@@ -276,10 +305,11 @@ else:
 FWD_SHARE = int(V["len1_fe"]) / max(int(V["forward_overall_err"]), 1)
 REV_SHARE = int(V["align_worst_re"]) / max(int(V["reverse_overall_err"]), 1)
 CONCENTRATED = FWD_SHARE >= 0.5 and REV_SHARE >= 0.5
-V["error_lead"] = ("Each direction concentrates its errors in a different region of the "
-                   "problem."
+V["error_lead"] = ("Each direction fails in a different region of the "
+                   "problem (Table~2)."
                    if CONCENTRATED else
-                   "The residual errors are few enough to characterise individually.")
+                   "The residual errors are few enough to characterise "
+                   "individually (Table~2).")
 V["complement_clause"] = (" That is the alignment reverse ordering makes hardest, and it is "
                           "the complement of Forward's weakness." if CONCENTRATED else "")
 
@@ -380,7 +410,7 @@ WEAK_ADD_RATE, WEAK_SUB_RATE = V[f"posop_{WEAK_ADD}_ra"], V[f"posop_{WEAK_SUB}_r
 SAME_WEAK_RATE = V[f"posop_{WEAK_ADD}_rs"]
 
 V["position_operation_sentence"] = (
-    ("Split by operation, no subtraction answer reaches the thousands column at all, because "
+    ("Split by operation, no subtraction answer reaches the thousands column, because "
      "operands of at most three digits can only pass 999 by adding, so that cell is empty by "
      "construction. " if SUB_NO_THOUSANDS else "Split by operation, ")
     + ("Forward is exact at every place on addition, and " if FWD_ADD_PERFECT else "")
@@ -404,11 +434,26 @@ V["significance_sentence"] = (
 FEWER = ("Forward" if int(V["forward_overall_err"]) < int(V["reverse_overall_err"])
          else "Reverse" if int(V["reverse_overall_err"]) < int(V["forward_overall_err"])
          else None)
+OTHER = {"Forward": "Reverse", "Reverse": "Forward"}.get(FEWER)
+# Each direction's own worst group: single-digit answers for Forward, the widest operand-width
+# mismatch for Reverse. They are different groups that happen to be the same size, which is what
+# lets the two error counts be compared without a rate.
+HARDEST = {"Forward": (V["len1_fe"], V["len1_n"]),
+           "Reverse": (V["align_worst_re"], V["align_worst_n"])}
+SAME_DENOM = FEWER is not None and HARDEST["Forward"][1] == HARDEST["Reverse"][1]
+EPOCHS_95 = {m: V[f"curve_{m.lower()}_full_95"] for m in ("Forward", "Reverse")}
+FASTER = (FEWER is not None and EPOCHS_95[FEWER].isdigit() and EPOCHS_95[OTHER].isdigit()
+          and int(EPOCHS_95[FEWER]) < int(EPOCHS_95[OTHER]))
+SAME_SPEED = FEWER is not None and EPOCHS_95[FEWER] == EPOCHS_95[OTHER]
+CONVERGENCE = (" it converges in fewer epochs," if FASTER else
+               " it trains as easily," if SAME_SPEED else "")
+COST = (f" and its hardest case costs it {HARDEST[FEWER][0]} errors where {OTHER}'s costs "
+        f"{HARDEST[OTHER][0]}." if SAME_DENOM else " and its failure mode is the narrower.")
 if SIGNIFICANT and FEWER:
     V["recommendation"] = (
         f"Finally, if one direction has to be chosen, choose {FEWER}: it is more accurate on "
-        "this test set by a margin the paired test separates from noise, it trains as easily, "
-        "and its failure mode is rarer.")
+        "this test set by a margin the paired test separates from noise,"
+        + CONVERGENCE + COST)
 elif FEWER:
     V["recommendation"] = (
         "Finally, accuracy alone does not choose between the two directions here, since the "
@@ -430,9 +475,9 @@ V["carry_anomaly"] = (
     f"nowhere ({V['cb_no_carry_ra']} over {group(V['cb_no_carry_n'])} examples) than on "
     f"additions that do carry ({V['cb_with_carry_ra']} over {group(V['cb_with_carry_n'])}), "
     "which inverts the "
-    "expectation that carrying is the harder case. The operand width table resolves it: an "
+    "expectation that carrying is the harder case. Operand width resolves it: an "
     "addition that carries in no column tends to have a small second operand, so the no-carry "
-    "group is enriched in exactly the width mismatch above. Carrying is not what this model "
+    "group is enriched in the width mismatch above. Carrying is not what this model "
     "finds difficult; keeping the columns aligned is."
     if float(V["cb_no_carry_ra"]) < float(V["cb_with_carry_ra"]) else "")
 
@@ -460,13 +505,23 @@ V["carry_sentence"] = (
 BARRIER = (V["curve_reverse_full_tgt"].isdigit() and V["curve_reverse_full_95"].isdigit()
            and int(V["curve_reverse_full_tgt"]) >= 10
            and int(V["curve_reverse_full_95"]) - int(V["curve_reverse_full_tgt"]) <= 3)
+# How flat the curve is before it rises, as a fraction of where it ends up. The word the
+# sentence uses is the smallest one that is literally true of that fraction, so the reader can
+# take "below a quarter" at face value; if the rise is too gradual for any of them the clause
+# is dropped rather than stretched.
+FLAT_BOUNDS = (("a tenth", 0.10), ("a quarter", 0.25))
+RISE = int(V["curve_reverse_full_tgt"]) if V["curve_reverse_full_tgt"].isdigit() else 0
+REV_CURVE = HISTORIES["Reverse"]["val_seq"]
+FLAT_RATIO = max(REV_CURVE[:RISE - 1]) / REV_CURVE[-1] if RISE > 1 else 1.0
+FLAT_WORD = next((word for word, bound in FLAT_BOUNDS if FLAT_RATIO < bound), None)
+FLAT_CLAUSE = (f"it stays below {FLAT_WORD} of its final accuracy through epoch {RISE - 1}, then"
+               if FLAT_WORD else "it")
 V["barrier_sentence"] = (
-    " The reverse curve is the more striking of the two: it stays near a tenth of its final "
-    f"accuracy until epoch {V['curve_reverse_full_tgt']}, then passes both 0.78 "
-    f"and 0.95 within {max(1, int(V['curve_reverse_full_95']) - int(V['curve_reverse_full_tgt']))}"
-    " epoch of doing so (Figure~1, left). A transition that abrupt is a barrier being crossed "
-    "rather than capacity being filled, which is also why the reduced reverse run, given fewer "
-    "updates over the same number of epochs, never crosses it."
+    f" The reverse curve is the more striking of the two: {FLAT_CLAUSE} passes 0.78 at epoch "
+    f"{V['curve_reverse_full_tgt']} and 0.95 at epoch {V['curve_reverse_full_95']} "
+    "(Figure~1, left). A transition that abrupt is a barrier being crossed "
+    "rather than capacity being filled, which would also explain why the reduced reverse run, "
+    "given fewer updates in the same epochs, never crosses it."
     if BARRIER else "")
 
 # --------------------------------------------------------------- claims the prose makes
@@ -610,7 +665,7 @@ Student 2: Nhu Hieu Nguyen \hfill Student 2 ID: n12194778 \\
 directions, at the full training set of __CURVE_FORWARD_FULL_SIZE__ (solid) and at
 __CURVE_FORWARD_SMALL_SIZE__ examples (dashed); the dash-dot line marks the 0.78 target.
 \textbf{Centre and right:} error counts rather than accuracies, because every accuracy
-here exceeds 0.98 and rates render the two models as identical bars. Forward makes
+here exceeds 0.98 and rate bars would look identical. Forward makes
 __FORWARD_OVERALL_ERR__ errors in __TEST_N__ examples, Reverse __REVERSE_OVERALL_ERR__, and they
 fall in different places.
 \end{quote}
@@ -628,28 +683,32 @@ and training loop follow the workshop; only the changes described below differ.
 Two changes were needed. First, the vocabulary gains a single \texttt{-} token with two roles: the
 subtraction operator in a prompt (\texttt{50-73=}) and the sign of a negative result
 (\texttt{-23}). Reusing one symbol keeps the vocabulary at fifteen tokens and lets the model infer
-from position which role is meant, which is something self-attention can represent and a second
-token would have obscured. Second, the generator samples an operation as well as two non-negative
+from position which role is meant, which self-attention can represent and a second token
+would have hidden. Second, the generator samples an operation as well as two non-negative
 operands of at most three digits; Python's \texttt{str} of a negative integer already produces the
 signed target, so no special case is needed when $b > a$. Training data is a balanced mix, half
 addition and half subtraction, with unique prompts and disjoint train, validation and test splits
-drawn by slicing one shuffled list. Because borrows and signs make subtraction harder than
-addition, more epochs and a validation set were used to confirm convergence.
+drawn by slicing one shuffled list. Three training settings differ, because borrows and signs make subtraction harder than
+addition: __EPOCHS__ epochs rather than the workshop's 15, a cosine schedule annealing the
+learning rate to zero, and __CURVE_FORWARD_FULL_SIZE__ training examples rather than 50,000.
+Batch size stays at __TRAIN_BATCH__.
 
 \textbf{Task 2, reverse-prediction implementation.}
 Only the target is reversed; the prompt is untouched, so both models receive identical inputs and
 differ solely in output ordering. The answer string is reversed literally, so \texttt{31} becomes
 \texttt{13} and the model emits the units digit first, matching the direction in which carries and
 borrows propagate by hand. The brief does not define how to reverse a negative result, so the same
-literal rule is applied: \texttt{-123} becomes \texttt{321-}, placing the sign last. That is
-consistent with right-to-left computation, since the sign of a difference is only determined once
-the magnitude is. At evaluation the generated string is un-reversed before being parsed.
+literal rule is applied: \texttt{-123} becomes \texttt{321-}, placing the sign last. The sign
+depends only on which operand is larger, a fact the prompt carries at every step, so emitting it
+last withholds nothing from the model. At evaluation the generated string is un-reversed before
+being parsed.
 
 \section{Results and analysis (Task 3)}
 \textbf{Set-up.} Both models are evaluated on one shared held-out set of __TEST_N__ examples,
 balanced between addition and subtraction (subtraction fraction __SUB_FRACTION__). The set is
 regenerated from the seed inside \texttt{main\_report.ipynb}, checked against the shipped file,
-and confirmed to share no prompt with training or validation. Decoding is greedy, so the figures
+and shares no prompt with training or validation. Validation only tracks convergence;
+no model is selected on it. Decoding is greedy, so the numbers
 reproduce exactly on CPU or GPU.
 
 \textbf{Operation robustness.} Both models clear the task's 0.78 target: Forward reaches
@@ -660,28 +719,30 @@ __FORWARD_SUBTRACTION__ on subtraction, and Reverse __REVERSE_ADDITION__ and
 __REVERSE_SUBTRACTION__ respectively (Table~1).
 
 \textbf{Digit-level performance.} Accuracy is reported per place value over the answers that
-actually have that place, rather than over zero-padded answers. The distinction matters: only
+actually have that place, rather than over zero-padded answers. Only
 __POS_THOUSANDS_N__ of __TEST_N__ answers reach the thousands column, so padding would score the
-other __POS_THOUSANDS_REST__ as correct there by construction and drive every high position
+other __POS_THOUSANDS_REST__ as correct there and drive every high position
 to 1.000.
-__PLACE_SENTENCE__ __SIGN_SENTENCE__ __POSITION_OPERATION_SENTENCE__
+__PLACE_SENTENCE__ __SIGN_SENTENCE__ __POSITION_OPERATION_SENTENCE__ Token-level digit
+accuracy is __TOKEN_DIGIT_FORWARD__ for Forward and __TOKEN_DIGIT_REVERSE__ for
+Reverse__TOKEN_MATCH_CLAUSE__.
 
 \textbf{Direction effects.} The two models were scored on identical examples, so the comparison is
 paired and McNemar's exact test applies. Forward is right where Reverse is wrong __MCNEMAR_B__
 times, Reverse right where Forward is wrong __MCNEMAR_C__ times, and the two agree on
 __MCNEMAR_AGREE__ of __TEST_N__ examples; $p = __MCNEMAR_P_TEX__$. __SIGNIFICANCE_SENTENCE__
 
-Trained on the full set both directions converge, reaching 0.95 validation sequence accuracy at epoch
+Trained on the full set, both directions converge, reaching 0.95 validation sequence accuracy at epoch
 __CURVE_FORWARD_FULL_95__ and __CURVE_REVERSE_FULL_95__ respectively.__BARRIER_SENTENCE__ __DATA_EFFICIENCY__
 
 \textbf{Error patterns.} __ERROR_LEAD__
 
-__FORWARD_ERROR_OPENING__, a group holding only __LEN1_N__ of the __TEST_N__ examples,
-__FORWARD_OFFBY1_CLAUSE__. Predicting left to right requires committing to the answer's length before
+__FORWARD_ERROR_OPENING__, a group holding only __LEN1_N__ of the __TEST_N__ examples
+(Figure~2, top), __FORWARD_OFFBY1_CLAUSE__. Predicting left to right requires committing to the answer's length before
 emitting any digit, so a three-digit subtraction that collapses to a single digit is the case that
 ordering makes hardest.
 
-__ALIGN_WORST_RE__ of Reverse's __REVERSE_OVERALL_ERR__ errors fall on the __ALIGN_WORST_N__
+Of Reverse's __REVERSE_OVERALL_ERR__ errors, __ALIGN_WORST_RE__ fall on the __ALIGN_WORST_N__
 prompts whose first operand is __ALIGN_MAX_DIFF__ digits longer than the second, a rate of
 __ALIGN_WORST_RRATE__ there against __ALIGN_EASY_RE__ errors across the other __ALIGN_EASY_N__
 examples. Among the errors that keep the right number of digits, __REV_PLACE1__ are wrong at
@@ -712,7 +773,7 @@ Reverse & subtraction & __REVERSE_SUBTRACTION_N__ & __REVERSE_SUBTRACTION_ERR__ 
 \bottomrule
 \end{tabular}
 \caption{Accuracy with the count behind it and a Wilson interval. Both directions clear 0.78
-by a wide margin, so the informative object is the small number of errors.}
+by a wide margin, so the error counts are what separate them.}
 \end{table}
 
 % Figure 1 is hand-labelled inside \twocolumn[...], so the counter is still at zero here.
@@ -722,8 +783,8 @@ by a wide margin, so the informative object is the small number of errors.}
 \includegraphics[width=\columnwidth]{figures/figure_2_by_length.pdf}
 \caption{\textbf{Top:} errors by the number of digits in the answer, with the size of each
 group underneath. \textbf{Bottom:} errors by the sign of the answer, which the reverse ordering
-emits last. Both panels count the same errors as Figure~1, cut by the shape of the answer rather
-than by the operation.}
+emits last. Both panels count the errors of Figure~1, cut by the answer's shape rather than by
+operation.}
 \end{figure}
 
 \begin{table}[b]
@@ -739,20 +800,20 @@ __FORWARD_EXAMPLES__
 __REVERSE_EXAMPLES__
 \bottomrule
 \end{tabular}
-\caption{Representative failures of each model, taken from the full error list printed by
+\caption{Representative failures of each model, from the full error list in
 \texttt{main\_report.ipynb}. __OVERLAP_PHRASE__}
 \end{table}
 
 \section{Strengths, limitations and recommendations}
-The comparison's strength is its design. Both models share a tokeniser, architecture, optimiser
-and schedule, so prediction direction is the only variable between them, and both are scored on
+The comparison's strength is its design. Both models share a tokeniser, architecture, training
+data, optimiser and schedule, so prediction direction is the only variable between them, and both are scored on
 the same __TEST_N__ examples, which makes the accuracy difference a paired comparison with an
 exact test behind it. Several limitations bound what it supports. Each model was trained once, from one seed, so the difference in convergence speed
 between the directions is a single observation rather than a distribution.
 Operands are capped at three digits, so nothing here shows whether either direction generalises to
-longer arithmetic, and the error analysis suggests that is exactly where they would diverge.
-Positions are encoded absolutely, following the workshop, so Reverse's alignment errors have
-an untested cause.__ABLATION_CAVEAT__
+longer arithmetic, which is where the error analysis suggests they would diverge.
+Positions are encoded absolutely, following the workshop, so whether the encoding causes Reverse's
+alignment errors is untested.__ABLATION_CAVEAT__
 
 The recommendations follow from those. Train several seeds before treating the convergence gap as
 a property of the ordering rather than of one optimisation trajectory. Extend the operand range
