@@ -1,0 +1,7 @@
+Neither grid in Figure~1 shows mode collapse: every row reads as its digit, with varied slant,
+width and stroke (open and closed 4s, looped and plain 2s). The linear model draws even strokes
+much like real digits; the cosine model's are heavier, and more of its samples are blotted or
+ambiguous (filled 0s, 8s that read as 6s), hence its lower grid score, though on __N_A__ samples
+the two score alike (__ACC_LINEAR_DDPM_1000_S0__ and __ACC_COSINE_DDPM_1000_S0__). The spread agrees: at 1000
+steps the cosine samples vary a little more than real digits (__SPREAD_FULL_COSINE__ of their
+spread) and the linear ones a little less (__SPREAD_FULL_LINEAR__).

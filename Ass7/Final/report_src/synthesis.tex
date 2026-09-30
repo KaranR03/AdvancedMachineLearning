@@ -1,0 +1,16 @@
+\textbf{Strengths and limitations.} The design isolates the schedule (paired weights, batches, noise
+and samples), fixes its rule in advance and scales the FD with a real-data floor. Its main
+limitation is checkpoint noise: each model is its final checkpoint, without weight averaging, so
+its quality moves between epochs (linear FD __EPOCH_FD_LINEAR_50__,
+__EPOCH_FD_LINEAR_100__ and __EPOCH_FD_LINEAR_150__ at epochs 50, 100 and 150) and between seeds
+(cosine, DDPM, $K = 250$: __FD_COSINE_DDPM_250_S1__ at seed 1, __FD_COSINE_DDPM_250_S0__ at seed 0).
+That spread, not the sample count, leaves most step counts unclear and makes the epoch figures above
+a single noisy reading. The intervals cover seed 0's sampling only; the FD uses a small classifier's
+features at __N_A__ samples, so it is not comparable with FID; and every model is a
+$T = 1000$ U-Net on $20\times20$ digits.
+
+\textbf{Recommendations.} Average the weights during training, as Ho et al.\ do (an exponential
+moving average, decay 0.9999), and add seeds. Sample in few steps with the posterior variance $\tilde\beta$ or with learned variances,
+which Nichol and Dhariwal found keep quality with an order of magnitude fewer steps. To test a
+smaller $T$, rescale the linear $\beta$ range with $T$, as their released code does; the tutorial's
+ends at $\bar\alpha_T = __SHORT_END__$ over 100 steps.

@@ -1,0 +1,9 @@
+__VARIANCE_SENTENCE__ The cosine schedule thus helps the tutorial's sampler at few steps mostly
+through its gentle start near $t = 0$, which shortens that jump, rather than through the gentler
+noisy end the hypothesis rests on. DDIM adds no noise, and with it neither schedule is reliably
+better: at $K = 10$ seed 0 favours the linear model (__GAP_DDIM_10__) and seed 2 the cosine
+(__GAP_DDIM_10_S2__). At $K = 10$ the linear model's DDPM samples also lose variety (spread
+__SPREAD_LINEAR_DDPM_10_S0__, cosine __SPREAD_COSINE_DDPM_10_S0__), and the cosine samples are read
+as their digit less often at $K = 50$ to 250 with DDPM (__ACC_COSINE_DDPM_100_S0__ against
+__ACC_LINEAR_DDPM_100_S0__ at $K = 100$) and at every $K$ with DDIM (__ACC_COSINE_DDIM_10_S0__
+against __ACC_LINEAR_DDIM_10_S0__ at $K = 10$), in line with Figure~1's heavier strokes.
