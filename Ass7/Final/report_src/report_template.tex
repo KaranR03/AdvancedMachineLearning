@@ -58,8 +58,8 @@ Student 2: Nhu Hieu Nguyen \hfill Student 2 ID: n12194778\par
 \vspace{2pt}
 {\small\textbf{Figure 1:} Twelve samples per digit from the linear-schedule (left) and
 cosine-schedule (right) models at seed 0 and 1000 steps; images in the same place start from the
-\emph{same} noise. The classifier reads __GRID_ACC_LINEAR__ (left) and
-__GRID_ACC_COSINE__ (right) as the intended digit.\par}
+\emph{same} noise. Class consistency (Section~3): __GRID_ACC_LINEAR__ (left) and
+__GRID_ACC_COSINE__ (right).\par}
 \vspace{6pt}
 }]
 
@@ -100,12 +100,13 @@ schedule.''}
 Nichol and Dhariwal found that a linear-schedule model
 ``does not get much worse'' when up to 20\% of the reverse process is skipped. With the simple
 loss used here, their cosine schedule improved log-likelihood on CIFAR-10 (3.37 to 3.26 bits/dim)
-but not FID (2.90 to 3.05), and their sampling in far fewer steps came from \emph{learning} the
-reverse variances; with fixed variances, as here, quality fell much faster as steps were removed.
-Song et al.\ (2021) showed that DDIM, a deterministic sampler for the same trained network, gives
-good samples 10 to 50 times faster. Lin et al.\ (2024) showed that common schedules and step
-choices leave signal at the last step, which harms sampling in few steps. None of them isolates
-what the schedule alone does to few-step sampling, which is the question tested here.
+but not FID (2.90 to 3.05), and their few-step results came from \emph{learning} the
+reverse variances; with fixed variances, as here, quality fell much faster with fewer steps.
+Song et al.\ (2021) showed that DDIM, a deterministic sampler for the same network, gives
+good samples 10 to 50 times faster. Lin et al.\ (2024) found that common schedules leave
+signal at $t = T$, where sampling starts from pure noise, and that at very few steps a grid counted
+back from $T$ samples better than an evenly spaced one. None isolates the schedule's own effect
+at few steps, the question tested here.
 
 \section{Methodology}
 \textbf{Baseline.} Tutorial 9.3's conditional DDPM, unchanged: \texttt{UNet\_cond} (__N_UNET__
@@ -172,7 +173,7 @@ __CONCLUSION__
 \footnotesize
 \setlength{\parindent}{0pt}
 \newcommand{\bib}[1]{\par\hangindent=1em #1}
-\bib{Heusel, M. et al. (2017). GANs trained by a two time-scale update rule converge to a local
+\bib{Heusel, M., Ramsauer, H., Unterthiner, T., Nessler, B. and Hochreiter, S. (2017). GANs trained by a two time-scale update rule converge to a local
 Nash equilibrium. \emph{NeurIPS}.}
 \bib{Ho, J., Jain, A. and Abbeel, P. (2020). Denoising diffusion probabilistic models.
 \emph{NeurIPS}.}

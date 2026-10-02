@@ -14,7 +14,7 @@ high-quality samples using fewer time steps than a linear schedule.
 
 | file | bytes | sha256 |
 |---|---|---|
-| `project7_report.pdf` | 152,386 | `1d04126f958faa40695aa5dea32a01f5fcf82dc8d731fdb85e06bfa395b5b10d` |
+| `project7_report.pdf` | 152,991 | `4e8b3c4cfdb4d58631abecc1e958665ddaf690cf6eddaa80d749bf5462148262` |
 | `project7_code.zip` | 17,937,954 | `25a71d9935134788e791c6b38a10b01472b920de5cbd67ef6d973e2e4a22a805` |
 
 ## Result

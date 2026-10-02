@@ -299,10 +299,10 @@ V["full_sentence"] = (
 SEC_GAP = abs(f(V["seconds_linear"]) - f(V["seconds_cosine"])) / f(V["seconds_linear"])
 V["time_sentence"] = (
     f"An epoch took {V['seconds_linear']}~s (linear) and {V['seconds_cosine']}~s (cosine)"
-    + (", the same within timing noise, as expected: the schedule changes which noise level a "
+    + (", equal within timing noise, as expected: the schedule changes which noise level a "
        "step uses, not the computation." if SEC_GAP < 0.05 else
        ", a difference the identical code path does not explain, so it reflects the machine.")
-    + f" The seed-0 snapshots reach within 10\\% of their final FD by epoch "
+    + f" The seed-0 snapshots first come within 10\\% of their final FD at epoch "
     f"{V['reach_epoch_lin']} (linear, {V['reach_min_lin']}~min) and {V['reach_epoch_cos']} "
     f"(cosine, {V['reach_min_cos']}~min).")
 
@@ -316,11 +316,11 @@ V["loss_sentence"] = (
     f"The final training losses differ ({V['loss_final_linear']} linear, "
     f"{V['loss_final_cosine']} cosine at seed 0) "
     + ("mostly" if SAME_ERROR else "partly")
-    + f" because the schedules average over different noise levels: {V['n_noisy_linear']} of 20 "
+    + f" because the schedules weight noise levels differently: {V['n_noisy_linear']} of 20 "
     f"evenly spaced steps leave under 1\\% of the signal with the linear schedule and "
-    f"{V['n_noisy_cosine']} with the cosine, and there the noise is almost free to predict (MSE "
-    f"{V['loss_noisy_linear']} against {V['loss_else_linear']} elsewhere). At the same noise "
-    f"level with over 1\\% of the signal left, the cosine model's error averages "
+    f"{V['n_noisy_cosine']} with the cosine, where the noise is almost free to predict (MSE "
+    f"{V['loss_noisy_linear']} against {V['loss_else_linear']} elsewhere). At equal noise "
+    f"levels with over 1\\% of the signal left, the cosine model's error averages "
     f"{V['match_mean']} times the linear model's ({V['match_min']} to {V['match_max']})"
     + (", about the same." if SAME_ERROR else
        (", larger." if f(ABOVE["mean"]) > 1.1 else ", smaller.")))
@@ -334,7 +334,7 @@ gap_tilde = f(VARIANCE[K0]["cosine"]["tilde"]) - f(VARIANCE[K0]["linear"]["tilde
 CLOSES = abs(gap_tilde) < 0.5 * abs(gap_beta)
 V["variance_sentence"] = (
     f"A follow-up at seed 0, run after the verdict, locates the DDPM gain. At $K = {K0}$ the "
-    f"second-to-last step jumps to step 0 and leaves noise of standard deviation "
+    f"second-to-last step jumps to $t = 1$ and leaves noise of standard deviation "
     f"{VARIANCE[K0]['linear']['noise']} (linear) against {VARIANCE[K0]['cosine']['noise']} "
     f"(cosine), which the last step barely removes. With Ho et al.'s smaller posterior variance "
     f"$\\tilde\\beta$, the FDs at $K = {K0}$ go from {VARIANCE[K0]['linear']['beta']} to "
@@ -351,13 +351,13 @@ def table_rows():
         cells = [str(k)]
         for sampler in SAMPLERS:
             if (SCHEDULES[0], SEEDS[0], sampler, k) not in QUALITY:
-                cells += ["n/a"] * 4
+                cells.append("\\multicolumn{4}{c}{not run}")
                 continue
             lin, cos = q("linear", sampler, k), q("cosine", sampler, k)
             if k == FULL:
                 winner = (FULL_BETTER if FULL_DECISIVE else "unclear")
                 gap = f"{V['full_gap']} [{V['full_low']}, {V['full_high']}]"
-                others = "n/a"
+                others = "not run"
             else:
                 rule = RULE[sampler, k]
                 winner = rule["winner"]
