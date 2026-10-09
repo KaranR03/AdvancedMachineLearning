@@ -15,8 +15,8 @@ held-out views (Task 3).
 
 | file | bytes | sha256 |
 |---|---|---|
-| `project8_report.pdf` | 431,323 | `cdf102d3e95f0a47a2b558b41810b270b0d38bd913a809890d97a8839668d8f2` |
-| `project8_code.zip` | 18,986,972 | `c3d8077470bdb013fa6cb1b6a6cbce45a3f410020a0794ea5220cf377c970262` |
+| `project8_report.pdf` | 430,413 | `f0c33d85b52e08d1ebc22023b45793cd73d6369c0e1f5d2ad68b54c8ccf646db` |
+| `project8_code.zip` | 18,983,843 | `28bfc2638d4dc7a18e6a6bd12d40942308ac118132b84bb44a95091447fc2c9d` |
 
 ## Result
 

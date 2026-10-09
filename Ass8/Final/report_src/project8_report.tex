@@ -68,16 +68,21 @@ Student 2: Nhu Hieu Nguyen \hfill Student 2 ID: n12194778\par
 \end{figure*}
 
 \section{Introduction}
-Tiny NeRF, from the Week 10 tutorial, learns a scene as a function from a 3D position to a colour and a volume density, and renders a pixel by accumulating that function at 64 evenly spaced depths along the camera ray (Salvado, 2026, p.~71). The full NeRF of Mildenhall et al. (2020) adds two things it lacks: a colour that depends on the viewing direction, and hierarchical sampling, in which a coarse network chooses where a fine network looks. This report adds both, tests the result on the six held-out views (images 100 to 105) with PSNR and SSIM (Wang et al., 2004), and isolates each change with an ablation.
+Tiny NeRF, from the Week 10 tutorial, learns a scene as a function from a 3D position to a colour and a volume density, and renders a pixel by accumulating that function at 64 evenly spaced depths along the camera ray (Salvado, 2026, p.~71). The full NeRF of Mildenhall et al. (2020) adds two things it lacks: a colour that depends on the viewing direction, and hierarchical sampling, in which a coarse network chooses where a fine network looks. This report adds both, trains on 100 of 106 synthetic $100 \times 100$ images of a Lego bulldozer, tests on the other six (images 100 to 105) with PSNR and SSIM (Wang et al., 2004), and isolates each change with an ablation.
 
 \section{Implemented changes}
-\textbf{Task 1, view-dependent colour.} The position, encoded with $L = 6$ frequency bands (39 inputs), passes through two 128-unit layers, and the density is read from them before the direction enters, so the geometry is the same from every camera. A feature layer then meets the unit viewing direction, encoded with $L = 4$ bands (27 inputs; Salvado, 2026, p.~77), and a two-layer head outputs the colour. Ablation~A feeds the same network a zero direction, which makes it a matte renderer of identical size.
+\textbf{Task 1, view-dependent colour.} The position, encoded with $L = 6$ frequency bands (39 inputs), passes through two 128-unit layers, and the density is read from them before the direction enters, so the geometry is the same from every camera. A feature layer then meets the unit viewing direction, encoded with $L = 4$ bands (27 inputs; Salvado, 2026, p.~77), and a two-layer head outputs the colour. Ablation~A feeds the same network a zero direction: a matte renderer of identical size.
 
-\textbf{Task 2, hierarchical sampling.} A coarse network evaluates $N_c = 32$ stratified depths per ray. Its weights $w_i = T_i(1 - e^{-\sigma_i\delta_i})$, detached from the graph, define a piecewise constant density along the ray, and the starter's \texttt{sample\_pdf} inverts its cumulative distribution to draw $N_f = 64$ more depths where the weights are large. A fine network evaluates all 96 sorted depths, and the loss adds the coarse and fine errors so that the coarse network keeps learning where the surface is. Ablation~B keeps view-dependent colour but uses one network at 96 evenly spaced samples.
+\textbf{Task 2, hierarchical sampling.} A coarse network evaluates $N_c = 32$ stratified depths per ray. Its weights $w_i = T_i(1 - e^{-\sigma_i\delta_i})$, detached from the graph, define a piecewise constant density on the ray, and the starter's \texttt{sample\_pdf} inverts its cumulative distribution to draw $N_f = 64$ more depths where the weights are large. A fine network evaluates all 96 sorted depths, and the loss adds the coarse and fine errors so the coarse network keeps learning where the surface is. Ablation~B: view-dependent colour, one network, 96 evenly spaced samples.
 
-\textbf{Protocol.} Each model trains for 100 epochs on batches of 1,024 rays with Adam (learning rate decaying from $5 \times 10^{-4}$ to $5 \times 10^{-5}$) and is scored with its final-epoch weights, so no test view informed any choice.
+\textbf{Protocol.} Each model trains for 100 epochs on batches of 1,024 rays with Adam (learning rate decaying from $5 \times 10^{-4}$ to $5 \times 10^{-5}$) and is evaluated with the weights of its final epoch, not of its best test epoch.
 
 \section{Results}
+Extended NeRF reaches a mean test PSNR of 28.44 dB (Table~1), above the 28 dB the task expects, with four of the six views at or above it. It is 3.03 dB above Tiny NeRF and higher on all six views (Figure~1); Figure~2 shows novel views around a full turn. The training curves are nearly flat at the end (Figure~3): in the last ten epochs Extended NeRF gained $+$0.09 dB, Tiny NeRF $+$0.01 dB.
+
+Removing view dependence (ablation~A) costs 2.03 dB, and Extended NeRF is higher on all six views (by $+$1.40 to $+$2.82 dB). Removing hierarchical sampling (ablation~B) costs 0.10 dB, but per view the difference runs from $-$0.16 to $+$0.41 dB, favouring Extended NeRF only on three of the six views, so the two samplers are not reliably different at the trained budget.
+
+% Declared after the Results text so that it floats to the top of the column that text is in.
 \begin{table}[t]
 \centering
 \footnotesize
@@ -94,43 +99,39 @@ Extended NeRF & yes & yes & 128 & 96,904 & \textbf{28.44} & \textbf{0.940} \\
 \caption{Means over the six held-out views (PSNR in dB). View: direction input. Hier.: coarse and fine networks. Evals: network evaluations per ray.}
 \end{table}
 
-Extended NeRF reaches a mean test PSNR of 28.44 dB (Table~1), above the 28 dB the task expects, with four of the six views at or above it. It is 3.03 dB above Tiny NeRF and higher on all six views (Figure~1); Figure~2 shows both models' novel views around a full turn. The training curves are almost flat at the end (Figure~3): over the last ten epochs Extended NeRF gained $+$0.09 dB and Tiny NeRF $+$0.01 dB.
-
-Removing view dependence (ablation~A) costs 2.03 dB, and Extended NeRF is higher on all six views (by $+$1.40 to $+$2.82 dB). Removing hierarchical sampling (ablation~B) costs 0.10 dB, and Extended NeRF is higher on three of the six views (by $-$0.16 to $+$0.41 dB), so at the trained budget the two samplers are not reliably different.
-
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/figure_3_curves.pdf}
-\caption{Test PSNR per training epoch, logged only; the final epoch's weights are reported.}
+\caption{Test PSNR per training epoch, for monitoring only (dashed: 28 dB); all results use the final epoch's weights.}
 \end{figure}
 
 \section{Discussion}
 \textbf{Rendering quality.} Tiny NeRF's render is visibly softer: the studs on the bulldozer blur together, and its error is brightest along the silhouette and the rim of the base (Figure~1). Extended NeRF resolves the studs, and its remaining error is mostly a thin outline at depth edges. Its turntable frames stay sharper in the same way.
 
-\textbf{View-dependent appearance.} Freezing Extended NeRF's direction input at one camera's direction changes its colours by 0.0277 on average and lowers test view 0 from 26.42 to 21.38 dB (Figure~4, top), so the model relies on the direction heavily. Projecting 162 flat object points into the training cameras that see them unblocked (a median of 18) shows whether the photographs warrant that: a point's brightness varies across them by 0.0199 (median standard deviation), above the 0.0167 that matte ablation~A shows from geometry and sampling alone, so the scene does change with viewpoint, and Extended NeRF follows that change more closely than ablation~A (median correlation 0.69 against 0.40; Figure~4, bottom). But its renders vary by 0.0272, more than the photographs at 75\% of points. That excess is what the shape and radiance ambiguity predicts (Zhang et al., 2020): a colour that depends on direction can also absorb errors in the geometry. NeRF itself loses more without view dependence (31.01 against 27.66 dB; Mildenhall et al., 2020, Table~2), which it attributes to specularities.
+\textbf{View-dependent appearance.} Freezing Extended NeRF's direction input at one camera's direction changes its colours by 0.0277 on average (0 to 1 scale) and lowers test view 0 from 26.42 to 21.38 dB (Figure~4, top): the model relies heavily on the direction. To test whether the photographs warrant this, 162 object points away from image edges were projected into the training cameras that see them unoccluded (median 18 per point). Across those cameras, a point's brightness varies by 0.0199 (median standard deviation), above the 0.0167 that matte ablation~A shows from geometry and sampling alone, so the scene does change with viewpoint. Extended NeRF follows that change more closely than ablation~A (median correlation 0.69 against 0.40; Figure~4, bottom), but its renders vary by 0.0272, more than the photographs at 75\% of points. That excess is what the shape-radiance ambiguity predicts (Zhang et al., 2020): a direction-dependent colour can also absorb geometry errors. NeRF loses more without view dependence (31.01 against 27.66 dB; Mildenhall et al., 2020, Table~2), and its Fig.~4 shows why on this same bulldozer: the tread's specular reflection is lost.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/figure_4_view_dependence.pdf}
-\caption{Top: test view 0 from Extended NeRF, with its direction input frozen to test view 3's, and the colour change. Bottom: per flat object point, the brightness spread across the training cameras that see it (left; quartile boxes) and the correlation of rendered with photographed brightness across them (right; dotted lines: medians).}
+\caption{Top: Extended NeRF's test view 0, with the direction input frozen to view 3's, and the colour change. Bottom, per object point away from image edges: brightness spread across the cameras that see it (left; quartiles) and correlation with the photographs (right; dotted: medians).}
 \end{figure}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/figure_5_sampling.pdf}
-\caption{Top: coarse (bars) and fine (line) weights on one object ray of test view 0, fine samples marked below. Bottom: mean test PSNR of the trained models rendered at other sample counts (coarse to fine kept at 1 : 2).}
+\caption{Top: one object ray of test view 0: coarse weights (bars), the 32 coarse samples and the 64 fine samples drawn from those weights (ticks). Bottom: mean test PSNR of the trained models at other sample counts (coarse to fine 1:2).}
 \end{figure}
 
-\textbf{Hierarchical sampling.} The fine samples do find the surface: on the 3,371 object rays of test view 0, 84.7\% of them fall near it, against 14.3\% of 96 uniform samples (Figure~5, top; near: within the central 90\% of the final weights, widened by half). That buys little PSNR here, because uniform sampling is already near its limit: 28.34 dB at 96 samples and 28.42 dB at 256 (Figure~5, bottom). At equal work, counting every network evaluation, hierarchical sampling trails by 2.61 dB at 32 evaluations per ray, where the coarse pass has only 8 samples to find thin parts with, and by 1.25 dB at 64; it leads only by 0.05 dB at 128 and by 0.16 dB at 256, against 0.95 dB in NeRF's ablation at an equal 256 (Mildenhall et al., 2020, Table~2).
+\textbf{Hierarchical sampling.} The fine samples find the surface: on test view 0's 3,371 object rays, 84.7\% of them fall near it, against 14.3\% of 96 uniform samples (near: inside the interval holding the central 90\% of the final weights, widened by half its width each side; Figure~5, top, shows one ray). That buys little PSNR here: uniform sampling is already near its limit, 28.34 dB at 96 samples and 28.42 dB at 256 (Figure~5, bottom). At equal work (all network evaluations counted), hierarchical sampling trails by 2.61 dB at 32 evaluations per ray, where the coarse pass has only 8 samples to locate thin structures, and by 1.25 dB at 64. It leads only by 0.05 dB at 128 and by 0.16 dB at 256, against 0.95 dB in NeRF's ablation at an equal 256 (Mildenhall et al., 2020, Table~2).
 
 \textbf{Overall performance.} Extended NeRF's accuracy has a price: 96,904 parameters against 22,148, 128 network evaluations per ray against 64, 142 against 33 ms per test image on an NVIDIA A16-4Q, and 81.8 against 22.2 minutes of training. Ablation~B comes within 0.10 dB of it with 48,452 parameters and 42.9 minutes.
 
-\textbf{Strengths and limitations.} View-dependent colour gives a large, consistent gain for one small head, and importance sampling finds the surface; but hierarchical sampling doubles the networks for no reliable gain here, and the direction input can absorb geometry errors. One seed per model leaves 0.10 dB within seed noise, six test views is a small test set, and the sweep re-renders rather than retrains.
+\textbf{Strengths and limitations.} View-dependent colour gives a large, consistent gain for one small head, and importance sampling finds the surface; but hierarchical sampling doubles the networks for no reliable gain here, and the direction input can absorb geometry errors. One seed per model cannot separate 0.10 dB from run-to-run variation, six test views are few, and the sweep re-renders rather than retrains.
 
 \textbf{Recommendations.} For a scene this size, view-dependent colour with uniform sampling is the better trade: nearly all the quality at half the parameters and training time. Hierarchical sampling should be retested, with several seeds, where even spacing stops resolving the surface (higher resolution, deeper scenes), and penalising how much the colour varies with direction would show how much of that variation is compensation.
 
 \section{Conclusion}
-Extended NeRF reaches 28.44 dB on the six held-out views, 3.03 dB above Tiny NeRF; view-dependent colour is worth 2.03 dB over its ablation and hierarchical sampling 0.10 dB at the trained budget. The direction input follows real changes in the photographs but exaggerates them, and the coarse to fine sampler places samples well but pays only at large budgets here.
+Extended NeRF reaches 28.44 dB on the six held-out views, 3.03 dB above Tiny NeRF; view-dependent colour is worth 2.03 dB over its ablation and hierarchical sampling 0.10 dB at the trained budget. The direction input follows real changes in the photographs but exaggerates them, and the coarse-to-fine sampler places samples well but pays only at large budgets here.
 
 \section*{References}
 \footnotesize

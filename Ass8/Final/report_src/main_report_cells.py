@@ -121,11 +121,11 @@ PAIRS = [("Extended NeRF", "Tiny NeRF"), ("Extended NeRF", "No view dirs (abl. A
          ("Extended NeRF", "Uniform 96 (abl. B)"), ("No view dirs (abl. A)", "Tiny NeRF"),
          ("Uniform 96 (abl. B)", "Tiny NeRF")]
 paired = {}
-for a, b in PAIRS:
-    d = np.array(results[a]["psnr"]) - np.array(results[b]["psnr"])
-    paired[(a, b)] = d
-    print(f"paired | {a} - {b} | mean {d.mean():+.2f} dB | range {d.min():+.2f} to {d.max():+.2f} | "
-          f"{int((d > 0).sum())} of {len(d)} views higher")
+for model, baseline in PAIRS:
+    diff = np.array(results[model]["psnr"]) - np.array(results[baseline]["psnr"])
+    paired[(model, baseline)] = diff
+    print(f"paired | {model} - {baseline} | mean {diff.mean():+.2f} dB | range {diff.min():+.2f} to "
+          f"{diff.max():+.2f} | {int((diff > 0).sum())} of {len(diff)} views higher")
 '''
 
 QUAL_MD = """
@@ -136,51 +136,52 @@ figure: the view ranked in the middle by Extended NeRF's gain over Tiny NeRF.
 
 QUAL = '''
 # All six held-out views: ground truth, both models and their absolute error maps.
-err = {name: [(renders[name][i] - test_images[i]).abs().mean(-1).cpu().numpy() for i in range(6)]
-       for name in ("Tiny NeRF", "Extended NeRF")}
-vmax = max(e.max() for name in err for e in err[name])        # one colour scale for every map
-rows = [("ground truth", [im.cpu().numpy() for im in test_images], False),
-        ("Tiny NeRF", [im.cpu().numpy() for im in renders["Tiny NeRF"]], False),
-        ("Extended NeRF", [im.cpu().numpy() for im in renders["Extended NeRF"]], False),
-        ("|error| Tiny", err["Tiny NeRF"], True), ("|error| Extended", err["Extended NeRF"], True)]
+abs_error = {name: [(renders[name][i] - test_images[i]).abs().mean(-1).cpu().numpy() for i in range(6)]
+             for name in ("Tiny NeRF", "Extended NeRF")}
+vmax = max(error_map.max() for name in abs_error for error_map in abs_error[name])   # one colour scale
+rows = [("ground truth", [image.cpu().numpy() for image in test_images], False),
+        ("Tiny NeRF", [image.cpu().numpy() for image in renders["Tiny NeRF"]], False),
+        ("Extended NeRF", [image.cpu().numpy() for image in renders["Extended NeRF"]], False),
+        ("|error| Tiny", abs_error["Tiny NeRF"], True), ("|error| Extended", abs_error["Extended NeRF"], True)]
 fig, axes = plt.subplots(5, 6, figsize=(TEXT_WIDTH, 6.0))
-for r, (label, imgs, is_error) in enumerate(rows):
-    for c in range(6):
-        ax = axes[r, c]
+for row, (label, imgs, is_error) in enumerate(rows):
+    for col in range(6):
+        ax = axes[row, col]
         if is_error:
-            im = ax.imshow(imgs[c], cmap="inferno", vmin=0, vmax=vmax, interpolation="nearest")
+            error_image = ax.imshow(imgs[col], cmap="inferno", vmin=0, vmax=vmax, interpolation="nearest")
         else:
-            ax.imshow(imgs[c], interpolation="nearest")
+            ax.imshow(imgs[col], interpolation="nearest")
         if label in results:
-            ax.set_title(f"{results[label]['psnr'][c]:.2f} dB")
-        elif r == 0:
-            ax.set_title(f"test view {c}")
+            ax.set_title(f"{results[label]['psnr'][col]:.2f} dB")
+        elif row == 0:
+            ax.set_title(f"test view {col}")
         ax.set_xticks([]); ax.set_yticks([])
-    axes[r, 0].set_ylabel(label)
-fig.colorbar(im, ax=axes[3:, :], fraction=0.02, pad=0.01, label="mean absolute error")
+    axes[row, 0].set_ylabel(label)
+fig.colorbar(error_image, ax=axes[3:, :], fraction=0.02, pad=0.01, label="mean absolute error")
 plt.show()
 
 # Report figure 1: the view ranked in the middle by Extended NeRF's gain over Tiny NeRF, as
 # ground truth | Tiny NeRF | Extended NeRF | both error maps on the shared colour scale above.
 gains = np.array(results["Extended NeRF"]["psnr"]) - np.array(results["Tiny NeRF"]["psnr"])
-v = int(np.argsort(gains)[len(gains) // 2])
+report_view = int(np.argsort(gains)[len(gains) // 2])
 fig, axes = plt.subplots(1, 5, figsize=(TEXT_WIDTH, 1.75), gridspec_kw={"wspace": 0.04})
-panels = [(test_images[v].cpu().numpy(), f"ground truth\\ntest view {v}", None),
-          (renders["Tiny NeRF"][v].cpu().numpy(), f"Tiny NeRF\\n{results['Tiny NeRF']['psnr'][v]:.2f} dB", None),
-          (renders["Extended NeRF"][v].cpu().numpy(),
-           f"Extended NeRF\\n{results['Extended NeRF']['psnr'][v]:.2f} dB", None),
-          (err["Tiny NeRF"][v], "|error|\\nTiny NeRF", "inferno"),
-          (err["Extended NeRF"][v], "|error|\\nExtended NeRF", "inferno")]
+panels = [(test_images[report_view].cpu().numpy(), f"ground truth\\ntest view {report_view}", None),
+          (renders["Tiny NeRF"][report_view].cpu().numpy(),
+           f"Tiny NeRF\\n{results['Tiny NeRF']['psnr'][report_view]:.2f} dB", None),
+          (renders["Extended NeRF"][report_view].cpu().numpy(),
+           f"Extended NeRF\\n{results['Extended NeRF']['psnr'][report_view]:.2f} dB", None),
+          (abs_error["Tiny NeRF"][report_view], "|error|\\nTiny NeRF", "inferno"),
+          (abs_error["Extended NeRF"][report_view], "|error|\\nExtended NeRF", "inferno")]
 for ax, (img, title, cmap) in zip(axes, panels):
     if cmap is None:
         ax.imshow(img, interpolation="nearest")
     else:
-        im = ax.imshow(img, cmap=cmap, vmin=0, vmax=vmax, interpolation="nearest")
+        error_image = ax.imshow(img, cmap=cmap, vmin=0, vmax=vmax, interpolation="nearest")
     ax.set_title(title); ax.set_xticks([]); ax.set_yticks([])
-fig.colorbar(im, ax=axes, fraction=0.012, pad=0.01, aspect=15)
+fig.colorbar(error_image, ax=axes, fraction=0.012, pad=0.01, aspect=15)
 plt.savefig("figure_1_test_views.pdf", bbox_inches="tight", dpi=300)
 plt.show()
-print("report view:", v, "| Extended - Tiny gain per view (dB):", np.round(gains, 2).tolist())
+print("report view:", report_view, "| Extended - Tiny gain per view (dB):", np.round(gains, 2).tolist())
 '''
 
 CURVES_MD = """
@@ -193,29 +194,31 @@ last epoch's.
 CURVES = '''
 # Test PSNR during training for the four models, from the saved histories.
 histories = json.load(open("training_history.json"))
-key = {"Tiny NeRF": "TinyNeRF", "Extended NeRF": "ExtendedNeRF",
-       "No view dirs (abl. A)": "Ablation_NoViewDirs", "Uniform 96 (abl. B)": "Ablation_Uniform96"}
+HISTORY_KEYS = {"Tiny NeRF": "TinyNeRF", "Extended NeRF": "ExtendedNeRF",
+                "No view dirs (abl. A)": "Ablation_NoViewDirs", "Uniform 96 (abl. B)": "Ablation_Uniform96"}
 colors = {"Tiny NeRF": "tab:gray", "Extended NeRF": "tab:red",
           "No view dirs (abl. A)": "tab:blue", "Uniform 96 (abl. B)": "tab:green"}
 
 fig, ax = plt.subplots(figsize=(COLUMN_WIDTH, 1.35))
 for name in MODEL_NAMES:
-    h = histories[key[name]]
-    ax.plot(np.arange(1, len(h["test_psnr"]) + 1), h["test_psnr"], color=colors[name], lw=1, label=name)
+    history = histories[HISTORY_KEYS[name]]
+    ax.plot(np.arange(1, len(history["test_psnr"]) + 1), history["test_psnr"], color=colors[name], lw=1,
+            label=name)
 ax.axhline(28, ls="--", c="k", lw=0.6)
 ax.set_xlabel("epoch"); ax.set_ylabel("mean test PSNR (dB)")
-ax.set_ylim(20, 29.5); ax.set_xlim(0, len(h["test_psnr"])); ax.grid(alpha=0.3)
+ax.set_ylim(20, 29.5); ax.set_xlim(0, len(history["test_psnr"])); ax.grid(alpha=0.3)
 ax.legend(ncol=2, loc="lower right", frameon=False)
 plt.tight_layout()
 plt.savefig("figure_3_curves.pdf", bbox_inches="tight")
 plt.show()
 
 for name in MODEL_NAMES:
-    h = histories[key[name]]
-    last10 = np.mean(h["test_psnr"][-10:]) - np.mean(h["test_psnr"][-20:-10])
-    print(f"curves | {name} | epochs {len(h['test_psnr'])} | best {max(h['test_psnr']):.2f} dB | "
-          f"final {h['test_psnr'][-1]:.2f} dB | last-10-epoch gain {last10:+.2f} dB | "
-          f"{np.mean(h['epoch_seconds']):.1f} s per epoch | {np.sum(h['epoch_seconds']) / 60:.1f} min")
+    history = histories[HISTORY_KEYS[name]]
+    last10 = np.mean(history["test_psnr"][-10:]) - np.mean(history["test_psnr"][-20:-10])
+    print(f"curves | {name} | epochs {len(history['test_psnr'])} | best {max(history['test_psnr']):.2f} dB | "
+          f"final {history['test_psnr'][-1]:.2f} dB | last-10-epoch gain {last10:+.2f} dB | "
+          f"{np.mean(history['epoch_seconds']):.1f} s per epoch | "
+          f"{np.sum(history['epoch_seconds']) / 60:.1f} min")
 '''
 
 VIEW_MD = """
@@ -223,7 +226,7 @@ VIEW_MD = """
 Two questions. **Does Extended NeRF use the direction?** Freezing its direction input at one fixed
 direction (test view 3's) while keeping the geometry must change the render if it does, while the
 matte ablation A cannot change at all. **Is the change real?** Take points on the object's surface
-seen in test view 0, find every training camera that sees the same point unblocked, and read the
+seen in test view 0, find every training camera that sees the same point unoccluded, and read the
 point's brightness in those photographs. If the photographs change with the camera, the scene is
 view-dependent, and a model's renders of those same rays should follow the change.
 """
@@ -233,6 +236,7 @@ FROZEN = '''
 def render_frozen_direction(coarse, fine, c2w, frozen_dir, chunk=4096):
     """Hierarchical render in which the colour head always receives frozen_dir."""
     class Frozen(torch.nn.Module):
+        """Wraps a network so that its colour head sees frozen_dir instead of the ray's direction."""
         def __init__(self, net):
             super().__init__(); self.net = net
         def forward(self, x, d):
@@ -243,12 +247,13 @@ def render_frozen_direction(coarse, fine, c2w, frozen_dir, chunk=4096):
 view = 0
 frozen_dir = F.normalize(-test_poses[3][:3, 2], dim=0)      # test view 3 looks along its -z axis
 frozen = {"Extended NeRF": render_frozen_direction(ext_coarse, ext_fine, test_poses[view], frozen_dir),
-          "No view dirs (abl. A)": render_frozen_direction(nvd_coarse, nvd_fine, test_poses[view], frozen_dir)}
-change = {n: (frozen[n] - renders[n][view]).abs().mean(-1) for n in frozen}
-frozen_psnr = {n: psnr(frozen[n], test_images[view]) for n in frozen}
-for n in frozen:
-    print(f"frozen direction | {n} | mean colour change {change[n].mean().item():.4f} | "
-          f"PSNR {frozen_psnr[n]:.2f} dB with the direction frozen vs {results[n]['psnr'][view]:.2f} dB")
+          "No view dirs (abl. A)": render_frozen_direction(noview_coarse, noview_fine, test_poses[view],
+                                                           frozen_dir)}
+change = {name: (frozen[name] - renders[name][view]).abs().mean(-1) for name in frozen}
+frozen_psnr = {name: psnr(frozen[name], test_images[view]) for name in frozen}
+for name in frozen:
+    print(f"frozen direction | {name} | mean colour change {change[name].mean().item():.4f} | "
+          f"PSNR {frozen_psnr[name]:.2f} dB with the direction frozen vs {results[name]['psnr'][view]:.2f} dB")
 '''
 
 PHOTO = '''
@@ -258,18 +263,18 @@ def render_with_depth(coarse, fine, rays_o, rays_d, chunk=4096):
     parts = []
     with torch.no_grad():
         for i in range(0, rays_o.shape[0], chunk):
-            _, rgb, ex = render_rays(coarse, fine, rays_o[i:i + chunk], rays_d[i:i + chunk],
-                                     NEAR, FAR, N_C, N_F, return_extras=True)
-            parts.append((rgb.clamp(0, 1), (ex["weights_fine"] * ex["t_all"]).sum(-1),
-                          ex["weights_fine"].sum(-1)))
-    return [torch.cat(p, 0) for p in zip(*parts)]
+            _, rgb, extras = render_rays(coarse, fine, rays_o[i:i + chunk], rays_d[i:i + chunk],
+                                         NEAR, FAR, N_C, N_F, return_extras=True)
+            parts.append((rgb.clamp(0, 1), (extras["weights_fine"] * extras["t_all"]).sum(-1),
+                          extras["weights_fine"].sum(-1)))
+    return [torch.cat(column, 0) for column in zip(*parts)]
 
 
 def edge_strength(img):
     """Mean absolute difference between an image and its 3 x 3 local mean: large at edges."""
-    x = img.permute(2, 0, 1)[None]
-    local_mean = F.avg_pool2d(x, 3, stride=1, padding=1, count_include_pad=False)
-    return (x - local_mean).abs().mean(1)[0]                                  # [H, W]
+    img_chw = img.permute(2, 0, 1)[None]
+    local_mean = F.avg_pool2d(img_chw, 3, stride=1, padding=1, count_include_pad=False)
+    return (img_chw - local_mean).abs().mean(1)[0]                            # [H, W]
 
 
 def read_pixels(img_chw, i, j):
@@ -284,7 +289,7 @@ FLAT, DEPTH_TOL, MIN_CAMERAS = 0.02, 0.05, 10
 # Surface points: pixels of test view 0 on the object (the background is black, and the models
 # render it as opaque black too, so opacity alone would admit it), away from edges, placed at the
 # rendered depth.
-rays_o0, rays_d0 = (x.reshape(-1, 3) for x in get_rays(K, test_poses[view], H, W))
+rays_o0, rays_d0 = (rays.reshape(-1, 3) for rays in get_rays(K, test_poses[view], H, W))
 _, depth0, opacity0 = render_with_depth(ext_coarse, ext_fine, rays_o0, rays_d0)
 flat0 = edge_strength(test_images[view]).reshape(-1) < FLAT
 on_object = test_images[view].reshape(-1, 3).sum(-1) > 0.05          # not the black background
@@ -293,38 +298,41 @@ chosen = candidates[torch.linspace(0, len(candidates) - 1, min(400, len(candidat
 points = rays_o0[chosen] + depth0[chosen, None] * rays_d0[chosen]
 
 # Every training camera: project the points (get_rays in reverse), render the rays through those
-# pixels, and keep a point only where the camera sees it unblocked and away from an edge.
+# pixels, and keep a point only where the camera sees it unoccluded and away from an edge.
 photo, ext_lum, abl_lum = [], [], []
 for c2w, img in zip(train_poses, train_images):
-    R, o = c2w[:3, :3], c2w[:3, 3]
-    p_cam = (points - o) @ R                              # camera coordinates R^T (p - o)
-    z = (-p_cam[:, 2]).clamp_min(1e-3)                    # depth along the viewing axis
-    i = K[0, 2] + K[0, 0] * p_cam[:, 0] / z
-    j = K[1, 2] - K[1, 1] * p_cam[:, 1] / z
-    in_frame = (-p_cam[:, 2] > NEAR) & (i >= 1) & (i <= W - 2) & (j >= 1) & (j <= H - 2)
-    i, j = torch.where(in_frame, i, K[0, 2]), torch.where(in_frame, j, K[1, 2])
-    rays_d = torch.stack([(i - K[0, 2]) / K[0, 0], -(j - K[1, 2]) / K[1, 1], -torch.ones_like(i)], -1) @ R.T
-    rays_o = o.expand_as(rays_d)
-    rgb_e, depth_e, opacity_e = render_with_depth(ext_coarse, ext_fine, rays_o, rays_d)
-    rgb_a, _, _ = render_with_depth(nvd_coarse, nvd_fine, rays_o, rays_d)
-    seen = (in_frame & (opacity_e > 0.99) & ((depth_e - z).abs() < DEPTH_TOL)
-            & (read_pixels(edge_strength(img)[None], i, j)[:, 0] < FLAT))
-    missing = torch.full_like(z, float("nan"))
-    photo.append(torch.where(seen, read_pixels(img.permute(2, 0, 1), i, j) @ LUMA, missing))
-    ext_lum.append(torch.where(seen, rgb_e @ LUMA, missing))
-    abl_lum.append(torch.where(seen, rgb_a @ LUMA, missing))
-photo, ext_lum, abl_lum = (torch.stack(x, 1).cpu().numpy() for x in (photo, ext_lum, abl_lum))
+    rotation, origin = c2w[:3, :3], c2w[:3, 3]
+    p_cam = (points - origin) @ rotation                  # camera coordinates R^T (p - o)
+    depth = (-p_cam[:, 2]).clamp_min(1e-3)                # depth along the viewing axis
+    px_col = K[0, 2] + K[0, 0] * p_cam[:, 0] / depth      # pixel coordinates of each point
+    px_row = K[1, 2] - K[1, 1] * p_cam[:, 1] / depth
+    in_frame = ((-p_cam[:, 2] > NEAR) & (px_col >= 1) & (px_col <= W - 2)
+                & (px_row >= 1) & (px_row <= H - 2))
+    px_col, px_row = torch.where(in_frame, px_col, K[0, 2]), torch.where(in_frame, px_row, K[1, 2])
+    rays_d = torch.stack([(px_col - K[0, 2]) / K[0, 0], -(px_row - K[1, 2]) / K[1, 1],
+                          -torch.ones_like(px_col)], -1) @ rotation.T
+    rays_o = origin.expand_as(rays_d)
+    ext_rgb, ext_depth, ext_opacity = render_with_depth(ext_coarse, ext_fine, rays_o, rays_d)
+    abl_rgb, _, _ = render_with_depth(noview_coarse, noview_fine, rays_o, rays_d)
+    seen = (in_frame & (ext_opacity > 0.99) & ((ext_depth - depth).abs() < DEPTH_TOL)
+            & (read_pixels(edge_strength(img)[None], px_col, px_row)[:, 0] < FLAT))
+    missing = torch.full_like(depth, float("nan"))
+    photo.append(torch.where(seen, read_pixels(img.permute(2, 0, 1), px_col, px_row) @ LUMA, missing))
+    ext_lum.append(torch.where(seen, ext_rgb @ LUMA, missing))
+    abl_lum.append(torch.where(seen, abl_rgb @ LUMA, missing))
+photo, ext_lum, abl_lum = (torch.stack(per_camera, 1).cpu().numpy()
+                           for per_camera in (photo, ext_lum, abl_lum))
 
 n_cameras = (~np.isnan(photo)).sum(1)
 keep = n_cameras >= MIN_CAMERAS
 
 
-def per_point(fn, *arrays):
-    """Apply fn to the cameras that see each kept point."""
+def per_point(stat_fn, *arrays):
+    """Apply stat_fn to the cameras that see each kept point."""
     out = []
-    for rows in zip(*(a[keep] for a in arrays)):
-        m = ~np.isnan(rows[0])
-        out.append(fn(*(r[m] for r in rows)))
+    for point_rows in zip(*(array[keep] for array in arrays)):
+        seen_by = ~np.isnan(point_rows[0])
+        out.append(stat_fn(*(values[seen_by] for values in point_rows)))
     return np.array(out)
 
 
@@ -335,23 +343,25 @@ def correlation(a, b):
     return float((a * b).sum() / scale) if scale > 1e-12 else float("nan")
 
 
-spread = {n: per_point(np.std, x) for n, x in (("photographs", photo), ("Extended NeRF", ext_lum),
-                                                 ("No view dirs (abl. A)", abl_lum))}
-rms = {n: per_point(lambda p, x: np.sqrt(np.mean((x - p) ** 2)), photo, x)
-       for n, x in (("Extended NeRF", ext_lum), ("No view dirs (abl. A)", abl_lum))}
-corr = {n: per_point(correlation, photo, x) for n, x in (("Extended NeRF", ext_lum),
-                                                          ("No view dirs (abl. A)", abl_lum))}
+spread = {name: per_point(np.std, values)
+          for name, values in (("photographs", photo), ("Extended NeRF", ext_lum),
+                               ("No view dirs (abl. A)", abl_lum))}
+rms = {name: per_point(lambda photo_values, render_values:
+                       np.sqrt(np.mean((render_values - photo_values) ** 2)), photo, values)
+       for name, values in (("Extended NeRF", ext_lum), ("No view dirs (abl. A)", abl_lum))}
+corr = {name: per_point(correlation, photo, values)
+        for name, values in (("Extended NeRF", ext_lum), ("No view dirs (abl. A)", abl_lum))}
 print(f"photo consistency | {int(keep.sum())} surface points seen by at least {MIN_CAMERAS} training "
       f"cameras | median {int(np.median(n_cameras[keep]))} cameras per point")
-for stat, fn in (("median", np.median), ("mean", np.mean)):
+for stat, stat_fn in (("median", np.median), ("mean", np.mean)):
     print(f"photo consistency | brightness spread across cameras ({stat} std) | photographs "
-          f"{fn(spread['photographs']):.4f} | Extended NeRF {fn(spread['Extended NeRF']):.4f} | "
-          f"ablation A {fn(spread['No view dirs (abl. A)']):.4f}")
-for n in rms:
-    print(f"photo consistency | {n} | RMS brightness error against the photographs {rms[n].mean():.4f} | "
-          f"median correlation with the photographs across cameras {np.nanmedian(corr[n]):.2f}")
+          f"{stat_fn(spread['photographs']):.4f} | Extended NeRF {stat_fn(spread['Extended NeRF']):.4f} | "
+          f"ablation A {stat_fn(spread['No view dirs (abl. A)']):.4f}")
+for name in rms:
+    print(f"photo consistency | {name} | RMS brightness error against the photographs {rms[name].mean():.4f} | "
+          f"median correlation with the photographs across cameras {np.nanmedian(corr[name]):.2f}")
 # Share of points where a model's renders vary more across cameras than the photographs do.
-over = {n: float(np.mean(spread[n] > spread["photographs"])) for n in rms}
+over = {name: float(np.mean(spread[name] > spread["photographs"])) for name in rms}
 print(f"photo consistency | renders vary more than the photographs at | Extended NeRF "
       f"{100 * over['Extended NeRF']:.0f}% of points | ablation A {100 * over['No view dirs (abl. A)']:.0f}% of points")
 '''
@@ -359,15 +369,17 @@ print(f"photo consistency | renders vary more than the photographs at | Extended
 ERROR_SPLIT = '''
 # (3) Where in the image does the direction input lower the error? Split every test pixel into
 # edge pixels (edge strength at or above FLAT) and flat pixels, then share out the squared error.
-edge_px, err_a, err_e = [], [], []
+edge_px, sq_err_abl_a, sq_err_ext = [], [], []
 for i in range(len(test_images)):
     edge_px.append((edge_strength(test_images[i]) >= FLAT).reshape(-1))
-    err_a.append(((renders["No view dirs (abl. A)"][i] - test_images[i]) ** 2).mean(-1).reshape(-1))
-    err_e.append(((renders["Extended NeRF"][i] - test_images[i]) ** 2).mean(-1).reshape(-1))
-edge_px, err_a, err_e = (torch.cat(x) for x in (edge_px, err_a, err_e))
-reduction = err_a - err_e                          # positive where Extended NeRF is closer
+    sq_err_abl_a.append(((renders["No view dirs (abl. A)"][i] - test_images[i]) ** 2)
+                        .mean(-1).reshape(-1))
+    sq_err_ext.append(((renders["Extended NeRF"][i] - test_images[i]) ** 2).mean(-1).reshape(-1))
+edge_px, sq_err_abl_a, sq_err_ext = (torch.cat(per_view)
+                                     for per_view in (edge_px, sq_err_abl_a, sq_err_ext))
+reduction = sq_err_abl_a - sq_err_ext              # positive where Extended NeRF is closer
 print(f"error split | edge pixels {100 * edge_px.float().mean().item():.1f}% of test pixels | "
-      f"{100 * (err_a[edge_px].sum() / err_a.sum()).item():.1f}% of ablation A's squared error | "
+      f"{100 * (sq_err_abl_a[edge_px].sum() / sq_err_abl_a.sum()).item():.1f}% of ablation A's squared error | "
       f"{100 * (reduction[edge_px].sum() / reduction.sum()).item():.1f}% of the reduction to Extended NeRF")
 '''
 
@@ -383,8 +395,8 @@ bottom = outer[1].subgridspec(1, 2, wspace=0.42)
 panels = [(renders["Extended NeRF"][view].cpu().numpy(), "Extended NeRF"),
           (frozen["Extended NeRF"].cpu().numpy(), "direction frozen"),
           (change["Extended NeRF"].cpu().numpy(), "|colour change|")]
-for c, (img, title) in enumerate(panels):
-    ax = fig.add_subplot(top[0, c])
+for col, (img, title) in enumerate(panels):
+    ax = fig.add_subplot(top[0, col])
     ax.imshow(img, cmap="magma" if img.ndim == 2 else None, interpolation="nearest")
     ax.set_title(title); ax.set_xticks([]); ax.set_yticks([])
 
@@ -397,11 +409,11 @@ ax.set_ylabel("brightness spread"); ax.grid(alpha=0.3, axis="y")
 ax = fig.add_subplot(bottom[0, 1])
 bins = np.linspace(-1, 1, 21)
 peak = 0
-for n, colour, label in (("Extended NeRF", "tab:red", "Extended"),
-                         ("No view dirs (abl. A)", "tab:blue", "abl. A")):
-    counts, _, _ = ax.hist(corr[n][~np.isnan(corr[n])], bins=bins, histtype="step", color=colour,
+for name, colour, label in (("Extended NeRF", "tab:red", "Extended"),
+                            ("No view dirs (abl. A)", "tab:blue", "abl. A")):
+    counts, _, _ = ax.hist(corr[name][~np.isnan(corr[name])], bins=bins, histtype="step", color=colour,
                            lw=1, label=label)
-    ax.axvline(np.nanmedian(corr[n]), color=colour, lw=0.7, ls=":")
+    ax.axvline(np.nanmedian(corr[name]), color=colour, lw=0.7, ls=":")
     peak = max(peak, counts.max())
 ax.set_ylim(0, 1.45 * peak)                        # headroom for the legend
 ax.set_xlabel("correlation with photos"); ax.set_ylabel("surface points")
@@ -416,7 +428,7 @@ First, for every ray of test view 0 that hits the object: the share of each samp
 land near the surface, taken as the depth interval holding the central 90% of the final weights
 (widened by half its width on each side, and at least one uniform bin wide). Then the sample
 budget: a trained NeRF is a continuous function of position, so it can be rendered with more or
-fewer samples per ray than it was trained with. Extended NeRF keeps its 1 : 2 split between coarse
+fewer samples per ray than it was trained with. Extended NeRF keeps its 1:2 split between coarse
 and fine samples; ablation B uses evenly spaced samples. Comparing them at the same number of
 **network evaluations per ray** (coarse plus fine for the hierarchical model) compares equal work.
 """
@@ -424,6 +436,7 @@ and fine samples; ablation B uses evenly spaced samples. Comparing them at the s
 SWEEP = '''
 # Sample budget at render time: mean test PSNR against the number of network evaluations per ray.
 def mean_test_psnr(render_fn):
+    """Mean PSNR over the six test views of one renderer (rays -> colour)."""
     # 1,024 rays per chunk: at 256 samples per ray a 4,096-ray chunk needs 512 MB per layer,
     # more than a 4 GB GPU slice has free at that point.
     return float(np.mean([psnr(render_image(render_fn, test_poses[i], chunk=1024).clamp(0, 1),
@@ -431,44 +444,66 @@ def mean_test_psnr(render_fn):
 
 BUDGETS = [24, 48, 96, 192]                        # samples the final network sees per ray
 sweep = {"hierarchical": {}, "uniform": {}}        # keyed by network evaluations per ray
-for S in BUDGETS:
-    n_c = S // 3
-    fn = lambda o, d, n_c=n_c, n_f=S - n_c: render_rays(ext_coarse, ext_fine, o, d, NEAR, FAR, n_c, n_f)[1]
-    sweep["hierarchical"][n_c + S] = mean_test_psnr(fn)
-    print(f"budget | hierarchical | coarse {n_c} + fine {S - n_c} | {n_c + S} evaluations | "
-          f"PSNR {sweep['hierarchical'][n_c + S]:.2f} dB")
-for E in sorted(set(BUDGETS) | set(sweep["hierarchical"])):
-    sweep["uniform"][E] = mean_test_psnr(lambda o, d, E=E: render_rays_uniform(uni, o, d, NEAR, FAR, E))
-    print(f"budget | uniform | {E} samples | {E} evaluations | PSNR {sweep['uniform'][E]:.2f} dB")
-for E, p in sweep["hierarchical"].items():
-    print(f"equal work | {E} evaluations per ray | hierarchical {p:.2f} dB | uniform "
-          f"{sweep['uniform'][E]:.2f} dB | difference {p - sweep['uniform'][E]:+.2f} dB")
+for budget in BUDGETS:
+    n_coarse = budget // 3                         # the trained 1:2 split of coarse to fine samples
+    render_fn = lambda o, d, n_c=n_coarse, n_f=budget - n_coarse: render_rays(
+        ext_coarse, ext_fine, o, d, NEAR, FAR, n_c, n_f)[1]
+    sweep["hierarchical"][n_coarse + budget] = mean_test_psnr(render_fn)
+    print(f"budget | hierarchical | coarse {n_coarse} + fine {budget - n_coarse} | "
+          f"{n_coarse + budget} evaluations | PSNR {sweep['hierarchical'][n_coarse + budget]:.2f} dB")
+for evaluations in sorted(set(BUDGETS) | set(sweep["hierarchical"])):
+    sweep["uniform"][evaluations] = mean_test_psnr(
+        lambda o, d, n=evaluations: render_rays_uniform(uniform_net, o, d, NEAR, FAR, n))
+    print(f"budget | uniform | {evaluations} samples | {evaluations} evaluations | "
+          f"PSNR {sweep['uniform'][evaluations]:.2f} dB")
+for evaluations, hier_psnr in sweep["hierarchical"].items():
+    uniform_psnr = sweep["uniform"][evaluations]
+    print(f"equal work | {evaluations} evaluations per ray | hierarchical {hier_psnr:.2f} dB | uniform "
+          f"{uniform_psnr:.2f} dB | difference {hier_psnr - uniform_psnr:+.2f} dB")
 '''
 
 SAMPLING_FIG = '''
-# Report figure 5: one object ray of test view 0 (top) and the sample budget (bottom).
-r = int(torch.nonzero(hit)[len(torch.nonzero(hit)) // 2])
-fig, axes = plt.subplots(2, 1, figsize=(COLUMN_WIDTH, 2.4), gridspec_kw={"height_ratios": [1, 1.15], "hspace": 0.62})
-ax = axes[0]
-tc, wc = ex["t_coarse"][r].cpu().numpy(), ex["weights_coarse"][r].cpu().numpy()
-ta, wa = ex["t_all"][r].cpu().numpy(), ex["weights_fine"][r].cpu().numpy()
-ax.bar(tc, wc, width=(FAR - NEAR) / N_C * 0.9, color="tab:blue", alpha=0.35, label=f"coarse weights ({N_C} samples)")
-ax.plot(ta, wa, "-o", ms=1.5, color="tab:red", lw=0.8, label=f"fine weights ({N_C + N_F} samples)")
-ax.plot(ex["t_fine"][r].cpu().numpy(), np.full(N_F, -0.05), "|", color="k", ms=5, label=f"{N_F} fine samples")
-ax.set_xlim(NEAR, FAR); ax.set_xlabel("distance along the ray t"); ax.set_ylabel("weight $w_i$")
-ax.set_ylim(-0.12, 2.3 * max(wc.max(), wa.max()))          # headroom so the legend clears the peak
-ax.legend(loc="upper right", frameon=False); ax.grid(alpha=0.3)
+# Report figure 5, top: one object ray of test view 0 (the middle one in pixel order). The bars are
+# the coarse network's weights; below them, one row of ticks per sample set, so the evenly spaced
+# coarse samples can be compared with the fine samples that sample_pdf drew from those weights.
+object_rays = torch.nonzero(hit).squeeze(1)
+ray = int(object_rays[len(object_rays) // 2])
+t_coarse = extras["t_coarse"][ray].cpu().numpy()
+w_coarse = extras["weights_coarse"][ray].cpu().numpy()
+t_fine = extras["t_fine"][ray].cpu().numpy()
+peak = float(w_coarse.max())
 
+fig, axes = plt.subplots(2, 1, figsize=(COLUMN_WIDTH, 2.35),
+                         gridspec_kw={"height_ratios": [1, 1.15], "hspace": 0.62})
+ax = axes[0]
+ax.bar(t_coarse, w_coarse, width=(FAR - NEAR) / N_C * 0.9, color="tab:blue", alpha=0.45,
+       label="coarse weights")
+ax.plot(t_coarse, np.full(N_C, -0.15 * peak), "|", color="tab:blue", ms=4,
+        label=f"{N_C} coarse samples")
+ax.plot(t_fine, np.full(N_F, -0.36 * peak), "|", color="tab:red", ms=4,
+        label=f"{N_F} fine samples")
+ax.set_xlim(NEAR, FAR); ax.set_ylim(-0.48 * peak, 1.08 * peak)
+ax.set_yticks([tick for tick in plt.MaxNLocator(3).tick_values(0, peak) if 0 <= tick <= 1.05 * peak])
+ax.set_xlabel("distance along the ray t"); ax.set_ylabel("weight $w_i$")
+ax.grid(alpha=0.3)
+# The legend sits in its own row above the panel, where it cannot cover any data.
+ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=3, frameon=False, handlelength=0.8,
+          columnspacing=0.8, borderaxespad=0.2)
+
+# Bottom: mean test PSNR against network evaluations per ray, for both samplers.
 ax = axes[1]
 for name, colour, style in (("hierarchical", "tab:red", "-o"), ("uniform", "tab:green", "-s")):
-    xs = sorted(sweep[name])
+    evaluations = sorted(sweep[name])
     label = "Extended NeRF (coarse + fine)" if name == "hierarchical" else "ablation B (uniform)"
-    ax.plot(xs, [sweep[name][x] for x in xs], style, ms=3, lw=1, color=colour, label=label)
-ax.axvline(N_C + N_C + N_F, color="tab:red", lw=0.6, ls=":")
-ax.axvline(N_C + N_F, color="tab:green", lw=0.6, ls=":")
+    ax.plot(evaluations, [sweep[name][n] for n in evaluations], style, ms=3, lw=1, color=colour,
+            label=label)
+# A ring marks the budget each model was trained at (no full-height guide line to cross the legend).
+for name, colour, trained in (("hierarchical", "tab:red", N_C + N_C + N_F),
+                              ("uniform", "tab:green", N_C + N_F)):
+    ax.plot(trained, sweep[name][trained], "o", ms=7, mfc="none", mec=colour, mew=0.8)
 ax.set_xscale("log", base=2)
-ax.set_xticks(sorted(sweep["uniform"])); ax.set_xticklabels([str(x) for x in sorted(sweep["uniform"])])
-ax.set_xlabel("network evaluations per ray (dotted: as trained)"); ax.set_ylabel("mean test PSNR (dB)")
+ax.set_xticks(sorted(sweep["uniform"])); ax.set_xticklabels([str(n) for n in sorted(sweep["uniform"])])
+ax.set_xlabel("network evaluations per ray (rings: as trained)"); ax.set_ylabel("mean test PSNR (dB)")
 ax.legend(loc="lower right", frameon=False); ax.grid(alpha=0.3)
 plt.savefig("figure_5_sampling.pdf", bbox_inches="tight")
 plt.show()
@@ -485,26 +520,28 @@ full 40-frame movie, Tiny NeRF on the left and Extended NeRF on the right.
 MOVIE = '''
 # Novel views: a turntable of 40 frames, 9 degrees apart, rendered by both models.
 thetas = np.linspace(0, 360, 40, endpoint=False)
-frames = {name: [render_image(RENDERERS[name], pose_spherical(th, -30., 4.)).clamp(0, 1).cpu().numpy()
-                 for th in thetas] for name in ("Tiny NeRF", "Extended NeRF")}
+frames = {name: [render_image(RENDERERS[name], pose_spherical(theta, -30., 4.)).clamp(0, 1).cpu().numpy()
+                 for theta in thetas] for name in ("Tiny NeRF", "Extended NeRF")}
 print(f"turntable | {len(thetas)} frames | camera 30 degrees above the horizontal | radius 4")
 
 strip_idx = np.arange(0, 40, 5)                    # 8 frames, 45 degrees apart
-fig, axes = plt.subplots(2, len(strip_idx), figsize=(TEXT_WIDTH, 1.95), gridspec_kw={"wspace": 0.03, "hspace": 0.05})
-for r, name in enumerate(("Tiny NeRF", "Extended NeRF")):
-    for c, k in enumerate(strip_idx):
-        axes[r, c].imshow(frames[name][k], interpolation="nearest")
-        axes[r, c].set_xticks([]); axes[r, c].set_yticks([])
-        if r == 0:
-            axes[r, c].set_title(f"azimuth {thetas[k]:.0f}°")
-    axes[r, 0].set_ylabel(name)
+fig, axes = plt.subplots(2, len(strip_idx), figsize=(TEXT_WIDTH, 1.95),
+                         gridspec_kw={"wspace": 0.03, "hspace": 0.05})
+for row, name in enumerate(("Tiny NeRF", "Extended NeRF")):
+    for col, frame in enumerate(strip_idx):
+        axes[row, col].imshow(frames[name][frame], interpolation="nearest")
+        axes[row, col].set_xticks([]); axes[row, col].set_yticks([])
+        if row == 0:
+            axes[row, col].set_title(f"azimuth {thetas[frame]:.0f}°")
+    axes[row, 0].set_ylabel(name)
 plt.savefig("figure_2_novel_views.pdf", bbox_inches="tight", dpi=300)
 plt.show()
 
 # Side-by-side GIF: Tiny NeRF (left) | Extended NeRF (right)
-gif = [Image.fromarray((np.concatenate([a, b], axis=1) * 255).astype(np.uint8)).resize((400, 200), Image.NEAREST)
-       for a, b in zip(frames["Tiny NeRF"], frames["Extended NeRF"])]
-gif[0].save("nerf_turntable.gif", save_all=True, append_images=gif[1:], duration=100, loop=0)
+gif_frames = [Image.fromarray((np.concatenate([tiny_frame, ext_frame], axis=1) * 255).astype(np.uint8))
+              .resize((400, 200), Image.NEAREST)
+              for tiny_frame, ext_frame in zip(frames["Tiny NeRF"], frames["Extended NeRF"])]
+gif_frames[0].save("nerf_turntable.gif", save_all=True, append_images=gif_frames[1:], duration=100, loop=0)
 print("saved figure_2_novel_views.pdf and nerf_turntable.gif (40 frames, Tiny NeRF | Extended NeRF)")
 '''
 
@@ -519,31 +556,34 @@ EVALUATIONS = {"Tiny NeRF": N_SAMPLES_TINY, "Extended NeRF": N_C + N_C + N_F,
                "No view dirs (abl. A)": N_C + N_C + N_F, "Uniform 96 (abl. B)": N_C + N_F}
 summary = {}
 for name in MODEL_NAMES:
-    r, h = results[name], histories[key[name]]
-    summary[name] = {"mean_psnr": float(np.mean(r["psnr"])), "std_psnr": float(np.std(r["psnr"])),
-                     "mean_ssim": float(np.mean(r["ssim"])), "psnr_per_view": r["psnr"],
-                     "ssim_per_view": r["ssim"], "ms_per_image": 1000 * r["render_seconds"],
-                     "params": r["params"], "evaluations_per_ray": EVALUATIONS[name],
-                     "train_minutes": float(np.sum(h["epoch_seconds"]) / 60),
-                     "seconds_per_epoch": float(np.mean(h["epoch_seconds"]))}
-    if "coarse_psnr" in r:
-        summary[name]["coarse_mean_psnr"] = float(np.mean(r["coarse_psnr"]))
-    s = summary[name]
-    coarse = f"{s['coarse_mean_psnr']:.2f}" if "coarse_mean_psnr" in s else "none"
-    print(f"summary | {name} | PSNR {s['mean_psnr']:.2f} | sd {s['std_psnr']:.2f} | SSIM {s['mean_ssim']:.3f} | "
-          f"coarse PSNR {coarse} | {s['evaluations_per_ray']} evaluations per ray | {s['ms_per_image']:.0f} ms per image | "
-          f"{s['params']:,} parameters | {s['train_minutes']:.1f} min training | {s['seconds_per_epoch']:.1f} s per epoch")
-summary["paired"] = {f"{a} - {b}": d.tolist() for (a, b), d in paired.items()}
-summary["frozen_direction"] = {"mean_change": {n: change[n].mean().item() for n in change},
+    result, history = results[name], histories[HISTORY_KEYS[name]]
+    summary[name] = {"mean_psnr": float(np.mean(result["psnr"])), "std_psnr": float(np.std(result["psnr"])),
+                     "mean_ssim": float(np.mean(result["ssim"])), "psnr_per_view": result["psnr"],
+                     "ssim_per_view": result["ssim"], "ms_per_image": 1000 * result["render_seconds"],
+                     "params": result["params"], "evaluations_per_ray": EVALUATIONS[name],
+                     "train_minutes": float(np.sum(history["epoch_seconds"]) / 60),
+                     "seconds_per_epoch": float(np.mean(history["epoch_seconds"]))}
+    if "coarse_psnr" in result:
+        summary[name]["coarse_mean_psnr"] = float(np.mean(result["coarse_psnr"]))
+    line = summary[name]
+    coarse = f"{line['coarse_mean_psnr']:.2f}" if "coarse_mean_psnr" in line else "none"
+    print(f"summary | {name} | PSNR {line['mean_psnr']:.2f} | sd {line['std_psnr']:.2f} | "
+          f"SSIM {line['mean_ssim']:.3f} | coarse PSNR {coarse} | {line['evaluations_per_ray']} evaluations "
+          f"per ray | {line['ms_per_image']:.0f} ms per image | {line['params']:,} parameters | "
+          f"{line['train_minutes']:.1f} min training | {line['seconds_per_epoch']:.1f} s per epoch")
+summary["paired"] = {f"{model} - {baseline}": diff.tolist() for (model, baseline), diff in paired.items()}
+summary["frozen_direction"] = {"mean_change": {name: change[name].mean().item() for name in change},
                                "psnr": frozen_psnr}
-summary["photo_consistency"] = {"points": int(keep.sum()),
-                                "mean_spread": {n: float(v.mean()) for n, v in spread.items()},
-                                "median_spread": {n: float(np.median(v)) for n, v in spread.items()},
-                                "share_varying_more_than_photographs": over,
-                                "rms": {n: float(v.mean()) for n, v in rms.items()},
-                                "median_correlation": {n: float(np.nanmedian(v)) for n, v in corr.items()}}
+summary["photo_consistency"] = {
+    "points": int(keep.sum()),
+    "mean_spread": {name: float(values.mean()) for name, values in spread.items()},
+    "median_spread": {name: float(np.median(values)) for name, values in spread.items()},
+    "share_varying_more_than_photographs": over,
+    "rms": {name: float(values.mean()) for name, values in rms.items()},
+    "median_correlation": {name: float(np.nanmedian(values)) for name, values in corr.items()}}
 summary["error_split"] = {"edge_pixel_share": edge_px.float().mean().item(),
-                          "edge_share_of_ablation_a_error": (err_a[edge_px].sum() / err_a.sum()).item(),
+                          "edge_share_of_ablation_a_error": (sq_err_abl_a[edge_px].sum()
+                                                             / sq_err_abl_a.sum()).item(),
                           "edge_share_of_reduction": (reduction[edge_px].sum() / reduction.sum()).item()}
 summary["share_near_surface"] = share
 summary["sample_budget"] = sweep
@@ -551,6 +591,47 @@ summary["device"] = gpu_name
 json.dump(summary, open("results_summary.json", "w"), indent=1)
 print("saved results_summary.json")
 '''
+
+
+# Descriptive names for the short ones in the three draft cells this file edits. Renaming touches
+# NAME tokens only (see rename), so strings, comments and attribute access are left as they were.
+DRAFT_RENAMES = {
+    "20924039": {"ckpt": "checkpoint", "uni": "uniform_net", "nvd_coarse": "noview_coarse",
+                 "nvd_fine": "noview_fine", "m": "net", "k": "name", "v": "count"},
+    "718bcd2c": {"fn": "render_fn", "imgs": "view_images", "im": "image", "r": "result",
+                 "p": "view_psnr"},
+    "4dc05a96": {"ex": "extras", "e": "chunk_extras", "k": "key", "v": "fraction", "t": "t_vals",
+                 "w": "weights", "lo": "lower", "hi": "upper"},
+}
+DRAFT_DOCSTRINGS = {
+    "def load(path):\n":
+        '    """Read a checkpoint onto the current device (tensors only)."""\n',
+    "def timed_render(render_fn, c2w):\n":
+        '    """Render one view and return the image with its wall-clock time in seconds."""\n',
+    "def surface_interval(t_vals, weights, lower=0.05, upper=0.95):\n":
+        '    """Per ray, the depths at which the cumulative weight reaches lower and upper."""\n',
+}
+
+
+def rename(source, mapping):
+    """Rename identifiers by token position, keeping every other character of the source."""
+    import io
+    import tokenize
+    lines = source.splitlines(keepends=True)
+    hits = [token for token in tokenize.generate_tokens(io.StringIO(source).readline)
+            if token.type == tokenize.NAME and token.string in mapping]
+    for token in reversed(hits):                    # right to left keeps earlier columns valid
+        (row, start), (_, end) = token.start, token.end
+        line = lines[row - 1]
+        lines[row - 1] = line[:start] + mapping[token.string] + line[end:]
+    return "".join(lines)
+
+
+def add_docstrings(source):
+    """Insert the one-line docstring of DRAFT_DOCSTRINGS under the one def line the cell holds."""
+    headers = [header for header in DRAFT_DOCSTRINGS if header in source]
+    assert len(headers) == 1, headers
+    return source.replace(headers[0], headers[0] + DRAFT_DOCSTRINGS[headers[0]], 1)
 
 
 def apply(nb, md, code, set_markdown, set_code, insert_before, insert_after, raw_docstring):
@@ -571,12 +652,14 @@ deterministic: no jitter, and `sample_pdf` draws evenly spaced values of $u$.
     loader = nb["cells"][[c["id"] for c in nb["cells"]].index("20924039")]
     text = "".join(loader["source"])
     assert "torch.load(path, map_location=device)" in text
-    set_code(nb, "20924039", text.replace(
+    text = text.replace(
         "torch.load(path, map_location=device)",
-        "torch.load(path, map_location=device, weights_only=True)   # tensors only, no pickled code"))
+        "torch.load(path, map_location=device, weights_only=True)   # tensors only, no pickled code")
+    set_code(nb, "20924039", add_docstrings(rename(text, DRAFT_RENAMES["20924039"])))
     set_markdown(nb, "5221e02d", QUANT_MD)
     nb_cell = nb["cells"][[c["id"] for c in nb["cells"]].index("718bcd2c")]
-    nb_cell["source"] = (("".join(nb_cell["source"]).rstrip("\n") + QUANT_EXTRA).rstrip("\n")
+    text = add_docstrings(rename("".join(nb_cell["source"]), DRAFT_RENAMES["718bcd2c"]))
+    nb_cell["source"] = ((text.rstrip("\n") + QUANT_EXTRA).rstrip("\n")
                          .split("\n"))
     nb_cell["source"] = [s + "\n" for s in nb_cell["source"][:-1]] + [nb_cell["source"][-1]]
     insert_after(nb, "718bcd2c", md("p8m10001", PAIRED_MD), code("p8c10001", PAIRED))
@@ -587,11 +670,12 @@ deterministic: no jitter, and `sample_pdf` draws evenly spaced values of $u$.
     set_markdown(nb, "f6eacd23", VIEW_MD)
     set_code(nb, "d8d1c058", FROZEN)
     insert_after(nb, "d8d1c058",
-                 md("p8m10002", "Now the photographs: project flat points on the object (not the "
-                                "black background, which the models also render as opaque) into "
-                                "every training camera and compare brightness across cameras."),
+                 md("p8m10002", "Now the photographs: project points on the object that lie away "
+                                "from image edges (and off the black background, which the models "
+                                "also render as opaque) into every training camera, and compare "
+                                "brightness across cameras."),
                  code("p8c10002", PHOTO),
-                 md("p8m10006", "The flat surface points above leave out the edges. Next, where "
+                 md("p8m10006", "The surface points above leave out the edges. Next, where "
                                 "in the image the direction input lowers the error: edge pixels "
                                 "against flat pixels, over all six test views."),
                  code("p8c10006", ERROR_SPLIT),
@@ -603,14 +687,16 @@ deterministic: no jitter, and `sample_pdf` draws evenly spaced values of $u$.
     src = "".join(nb["cells"][[c["id"] for c in nb["cells"]].index("4dc05a96")]["source"])
     cut = src.index("# Plot one object ray")
     assert "[{hit.sum().item()} object rays]" in src
-    set_code(nb, "4dc05a96", src[:cut].replace("[{hit.sum().item()} object rays]",
-                                               "[{hit.sum().item():,} object rays]"))
+    text = src[:cut].replace("[{hit.sum().item()} object rays]", "[{hit.sum().item():,} object rays]")
+    set_code(nb, "4dc05a96", add_docstrings(rename(text, DRAFT_RENAMES["4dc05a96"])))
     insert_after(nb, "4dc05a96",
                  md("p8m10004", "The sample budget: Extended NeRF and ablation B rendered at "
                                 "several numbers of samples per ray."),
                  code("p8c10004", SWEEP),
-                 md("p8m10005", "The report's figure: where one ray's samples land, and the sample "
-                                "budget against equal work."),
+                 md("p8m10005", "The report's figure. Top: on one object ray, the coarse weights "
+                                "and where each sampler's samples land (the evenly spaced coarse "
+                                "samples, and the fine samples drawn from the coarse weights). "
+                                "Bottom: the sample budget against equal work."),
                  code("p8c10005", SAMPLING_FIG))
     set_markdown(nb, "9c492b5b", MOVIE_MD)
     set_code(nb, "e11be2c2", MOVIE)

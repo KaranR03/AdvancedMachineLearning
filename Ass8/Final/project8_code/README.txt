@@ -23,7 +23,7 @@ CONTENTS
 HOW TO RUN
   Unzip everything into one folder and run main_report.ipynb top to bottom. It needs no
   arguments and no data beyond what is in this archive, and takes under a minute on the IFN680
-  GPU server and about 7 minutes on a CPU. Rendering is deterministic, so it prints the same
+  GPU server and about 10 minutes on a CPU. Rendering is deterministic, so it prints the same
   numbers each time; on a different device the last printed digit can differ by float
   rounding, and the render times differ.
 

@@ -192,16 +192,17 @@ V["fig2_caption"] = (
     f"horizontal at radius {V['radius']}, every 45 degrees of azimuth: Tiny NeRF (top) and "
     "Extended NeRF (bottom).")
 V["fig3_caption"] = (
-    "Test PSNR per training epoch, logged only; the final epoch's weights are reported.")
+    "Test PSNR per training epoch, for monitoring only (dashed: 28 dB); all results use the final "
+    "epoch's weights.")
 V["fig4_caption"] = (
-    "Top: test view 0 from Extended NeRF, with its direction input frozen to test view 3's, and "
-    "the colour change. Bottom: per flat object point, the brightness spread across the training "
-    "cameras that see it (left; quartile boxes) and the correlation of rendered with "
-    "photographed brightness across them (right; dotted lines: medians).")
+    "Top: Extended NeRF's test view 0, with the direction input frozen to view 3's, and the "
+    "colour change. Bottom, per object point away from image edges: brightness spread across the "
+    "cameras that see it (left; quartiles) and correlation with the photographs (right; dotted: "
+    "medians).")
 V["fig5_caption"] = (
-    "Top: coarse (bars) and fine (line) weights on one object ray of test view 0, fine samples "
-    "marked below. Bottom: mean test PSNR of the trained models rendered at other sample counts "
-    "(coarse to fine kept at 1 : 2).")
+    "Top: one object ray of test view 0: coarse weights (bars), the 32 coarse samples and the 64 "
+    "fine samples drawn from those weights (ticks). Bottom: mean test PSNR of the trained models "
+    "at other sample counts (coarse to fine 1:2).")
 V["table_caption"] = (
     f"Means over the {WORDS[int(V['n_views'])]} held-out views (PSNR in dB). View: direction "
     "input. Hier.: coarse and fine networks. Evals: network evaluations per ray.")
@@ -230,8 +231,9 @@ V["intro"] = (
     "spaced depths along the camera ray (Salvado, 2026, p.~71). The full NeRF of Mildenhall et "
     "al. (2020) adds two things it lacks: a colour that depends on the viewing direction, and "
     "hierarchical sampling, in which a coarse network chooses where a fine network looks. This "
-    "report adds both, tests the result on the six held-out views (images 100 to 105) with PSNR "
-    "and SSIM (Wang et al., 2004), and isolates each change with an ablation.")
+    "report adds both, trains on 100 of 106 synthetic $100 \\times 100$ images of a Lego "
+    "bulldozer, tests on the other six (images 100 to 105) with PSNR and SSIM (Wang et al., 2004), "
+    "and isolates each change with an ablation.")
 
 V["changes"] = (
     "\\textbf{Task 1, view-dependent colour.} The position, encoded with $L = 6$ frequency bands "
@@ -239,32 +241,34 @@ V["changes"] = (
     "the direction enters, so the geometry is the same from every camera. A feature layer then "
     "meets the unit viewing direction, encoded with $L = 4$ bands (27 inputs; Salvado, 2026, "
     "p.~77), and a two-layer head outputs the colour. Ablation~A feeds the same network a zero "
-    "direction, which makes it a matte renderer of identical size.\n\n"
+    "direction: a matte renderer of identical size.\n\n"
     "\\textbf{Task 2, hierarchical sampling.} A coarse network evaluates $N_c = 32$ stratified "
     "depths per ray. Its weights $w_i = T_i(1 - e^{-\\sigma_i\\delta_i})$, detached from the "
-    "graph, define a piecewise constant density along the ray, and the starter's "
+    "graph, define a piecewise constant density on the ray, and the starter's "
     "\\texttt{sample\\_pdf} inverts its cumulative distribution to draw $N_f = 64$ more depths "
     "where the weights are large. A fine network evaluates all 96 sorted depths, and the loss "
-    "adds the coarse and fine errors so that the coarse network keeps learning where the surface "
-    "is. Ablation~B keeps view-dependent colour but uses one network at 96 evenly spaced "
-    "samples.\n\n"
+    "adds the coarse and fine errors so the coarse network keeps learning where the surface "
+    "is. Ablation~B: view-dependent colour, one network, 96 evenly spaced samples.\n\n"
     "\\textbf{Protocol.} Each model trains for 100 epochs on batches of 1,024 rays with Adam "
-    "(learning rate decaying from $5 \\times 10^{-4}$ to $5 \\times 10^{-5}$) and is scored "
-    "with its final-epoch weights, so no test view informed any choice.")
+    "(learning rate decaying from $5 \\times 10^{-4}$ to $5 \\times 10^{-5}$) and is evaluated "
+    "with the weights of its final epoch, not of its best test epoch.")
 
 V["results"] = (
     f"Extended NeRF reaches a mean test PSNR of {ext['psnr']} dB (Table~1), above the 28 dB the "
     f"task expects, with {WORDS[int(V['at_28'])]} of the six views at or above it. It is "
     f"{magnitude(p_tiny['mean'])} dB above Tiny NeRF and higher {on_views((EXT, TINY))} "
-    "(Figure~1); Figure~2 shows both models' novel views around a full turn. The training curves "
-    f"are almost flat at the end (Figure~3): over the last ten epochs Extended NeRF gained "
-    f"{CURVE[EXT]['last10']} dB and Tiny NeRF {CURVE[TINY]['last10']} dB.\n\n"
+    "(Figure~1); Figure~2 shows novel views around a full turn. The training curves "
+    f"are nearly flat at the end (Figure~3): in the last ten epochs Extended NeRF gained "
+    f"{CURVE[EXT]['last10']} dB, Tiny NeRF {CURVE[TINY]['last10']} dB.\n\n"
     f"Removing view dependence (ablation~A) costs {magnitude(p_a['mean'])} dB, and Extended NeRF "
     f"is higher {on_views((EXT, ABL_A))} (by {p_a['low']} to {p_a['high']} dB). Removing "
-    f"hierarchical sampling (ablation~B) costs {magnitude(p_b['mean'])} dB, and Extended NeRF is "
-    f"higher {on_views((EXT, ABL_B))} (by {p_b['low']} to {p_b['high']} dB)"
-    + (", so at the trained budget the two samplers are not reliably different."
-       if not consistent((EXT, ABL_B)) else ", a small but consistent difference."))
+    f"hierarchical sampling (ablation~B) costs {magnitude(p_b['mean'])} dB"
+    + ((f", but per view the difference runs from {p_b['low']} to {p_b['high']} dB, favouring "
+        f"Extended NeRF only {on_views((EXT, ABL_B))}, so the two samplers are not reliably "
+        "different at the trained budget.")
+       if not consistent((EXT, ABL_B)) else
+       (f", and Extended NeRF is higher {on_views((EXT, ABL_B))} (by {p_b['low']} to "
+        f"{p_b['high']} dB), a small but consistent difference.")))
 
 # ------------------------------------------------------------------------------ discussion
 QUALITATIVE_PATH = os.environ.get("P8_QUALITATIVE", f"{BASE}/tools/qualitative.tex")
@@ -277,56 +281,59 @@ OVERSHOOTS = f(V["spread_ext"]) > f(V["spread_photo"])
 V["discussion"] = (
     "\\textbf{Rendering quality.} " + qualitative + "\n\n"
     "\\textbf{View-dependent appearance.} Freezing Extended NeRF's direction input at one "
-    f"camera's direction changes its colours by {FROZEN[EXT]['change']} on average and lowers "
-    f"test view 0 from {FROZEN[EXT]['normal']} to {FROZEN[EXT]['frozen']} dB (Figure~4, top), so "
-    f"the model relies on the direction heavily. Projecting {V['points']} flat object points into "
-    f"the training cameras that see them unblocked (a median of {V['median_cameras']}) shows "
-    f"whether the photographs warrant that: a point's brightness varies across them by "
-    f"{V['spread_photo']} (median standard deviation), ")
+    f"camera's direction changes its colours by {FROZEN[EXT]['change']} on average (0 to 1 "
+    f"scale) and lowers test view 0 from {FROZEN[EXT]['normal']} to {FROZEN[EXT]['frozen']} dB "
+    "(Figure~4, top): the model relies heavily on the direction. To test whether the photographs "
+    f"warrant this, {V['points']} object points away from image edges were projected into the "
+    f"training cameras that see them unoccluded (median {V['median_cameras']} per point). Across "
+    f"those cameras, a point's brightness varies by {V['spread_photo']} (median standard "
+    "deviation), ")
 V["discussion"] += (
     (f"above the {V['spread_a']} that matte ablation~A shows from geometry and sampling alone, so "
-     "the scene does change with viewpoint")
+     "the scene does change with viewpoint. ")
     if PHOTO_VARIES else
     (f"no more than the {V['spread_a']} that matte ablation~A shows from geometry and sampling "
-     "alone, so the photographs barely change with viewpoint"))
+     "alone, so the photographs barely change with viewpoint. "))
 V["discussion"] += (
-    (", and Extended NeRF follows that change more closely than ablation~A (median correlation "
-     f"{PHOTO[EXT]['corr']} against {PHOTO[ABL_A]['corr']}; Figure~4, bottom). ")
+    ("Extended NeRF follows that change more closely than ablation~A (median correlation "
+     f"{PHOTO[EXT]['corr']} against {PHOTO[ABL_A]['corr']}; Figure~4, bottom)")
     if TRACKS else
-    (", and Extended NeRF follows it no better than ablation~A (median correlation "
-     f"{PHOTO[EXT]['corr']} against {PHOTO[ABL_A]['corr']}; Figure~4, bottom). "))
+    ("Extended NeRF follows it no better than ablation~A (median correlation "
+     f"{PHOTO[EXT]['corr']} against {PHOTO[ABL_A]['corr']}; Figure~4, bottom)"))
 V["discussion"] += (
-    (f"But its renders vary by {V['spread_ext']}, more than the photographs at {V['over_ext']}\\% "
-     "of points. That excess is what the shape and radiance ambiguity predicts (Zhang et al., "
-     "2020): a colour that depends on direction can also absorb errors in the geometry. ")
+    (f", but its renders vary by {V['spread_ext']}, more than the photographs at "
+     f"{V['over_ext']}\\% of points. That excess is what the shape-radiance ambiguity predicts "
+     "(Zhang et al., 2020): a direction-dependent colour can also absorb geometry errors. ")
     if OVERSHOOTS else
-    (f"Its renders vary by {V['spread_ext']}, no more than the photographs, so the direction "
+    (f". Its renders vary by {V['spread_ext']}, no more than the photographs, so the direction "
      "input shows no sign of absorbing geometry errors, the risk Zhang et al. (2020) describe. "))
 V["discussion"] += (
-    "NeRF itself loses more without view dependence (31.01 against 27.66 dB; Mildenhall et al., "
-    "2020, Table~2), which it attributes to specularities.")
+    "NeRF loses more without view dependence (31.01 against 27.66 dB; Mildenhall et al., 2020, "
+    "Table~2), and its Fig.~4 shows why on this same bulldozer: the tread's specular reflection "
+    "is lost.")
 
 V["discussion_2"] = (
-    "\\textbf{Hierarchical sampling.} The fine samples do find the surface: on the "
-    f"{V['object_rays']} object rays of test view 0, {SHARE['fine']}\\% of them fall near it, "
-    f"against {SHARE['uniform']}\\% of 96 uniform samples (Figure~5, top; near: within the "
-    "central 90\\% of the final weights, widened by half). That buys little PSNR here, "
-    "because uniform sampling is already near its limit: "
+    "\\textbf{Hierarchical sampling.} The fine samples find the surface: on test view 0's "
+    f"{V['object_rays']} object rays, {SHARE['fine']}\\% of them fall near it, "
+    f"against {SHARE['uniform']}\\% of 96 uniform samples (near: inside the interval holding the "
+    "central 90\\% of the final weights, widened by half its width each side; Figure~5, top, "
+    "shows one ray). That buys little PSNR here: uniform sampling is already near its limit, "
     f"{BUDGET['uniform'][UNIFORM_TRAINED]['psnr']} dB at {UNIFORM_TRAINED} samples and "
     f"{BUDGET['uniform'][TOP_UNIFORM]['psnr']} dB at {TOP_UNIFORM} (Figure~5, bottom). At equal "
-    "work, counting every network evaluation, ")
+    "work (all network evaluations counted), ")
 if LOSES_LOW:
     worst = min(LOW)
     V["discussion_2"] += (
         f"hierarchical sampling trails by {magnitude(EQUAL[worst]['diff'])} dB at {worst} "
         f"evaluations per ray, where the coarse pass has only "
-        f"{BUDGET['hierarchical'][worst]['n_c']} samples to find thin parts with, and by "
-        f"{magnitude(EQUAL[LOW[-1]]['diff'])} dB at {LOW[-1]}; ")
+        f"{BUDGET['hierarchical'][worst]['n_c']} samples to locate thin structures, "
+        f"and by {magnitude(EQUAL[LOW[-1]]['diff'])} dB at {LOW[-1]}. ")
 else:
-    V["discussion_2"] += "hierarchical sampling is not behind at any budget below the trained one; "
+    V["discussion_2"] += "hierarchical sampling is not behind at any budget below the trained one. "
 V["discussion_2"] += (
-    ("it leads only " if WINS_HIGH else "at the trained budget and above it ")
-    + " and ".join(f"by {magnitude(EQUAL[e]['diff'])} dB at {e}" if f(EQUAL[e]["diff"]) > 0
+    ("It leads only " if WINS_HIGH else "At the trained budget and above, it ")
+    + " and ".join(("" if WINS_HIGH else "leads ") + f"by {magnitude(EQUAL[e]['diff'])} dB at {e}"
+                   if f(EQUAL[e]["diff"]) > 0
                    else f"trails by {magnitude(EQUAL[e]['diff'])} dB at {e}" for e in HIGH)
     + ", against 0.95 dB in NeRF's ablation at an equal 256 (Mildenhall et al., 2020, "
     "Table~2).\n\n")
@@ -341,8 +348,9 @@ V["discussion_2"] += (
     "\\textbf{Strengths and limitations.} View-dependent colour gives a large, consistent gain "
     "for one small head, and importance sampling finds the surface; but hierarchical sampling "
     "doubles the networks for no reliable gain here, and the direction input can absorb "
-    f"geometry errors. One seed per model leaves {magnitude(p_b['mean'])} dB within seed noise, "
-    "six test views is a small test set, and the sweep re-renders rather than retrains.\n\n"
+    f"geometry errors. One seed per model cannot separate {magnitude(p_b['mean'])} dB from "
+    "run-to-run variation, six test views are few, and the sweep re-renders rather than "
+    "retrains.\n\n"
     "\\textbf{Recommendations.} For a scene this size, view-dependent colour with uniform "
     "sampling is the better trade: nearly all the quality at half the parameters and training "
     "time. Hierarchical sampling should be retested, with several seeds, where even spacing "
@@ -356,7 +364,7 @@ V["conclusion"] = (
     + ("direction input follows real changes in the photographs but exaggerates them"
        if PHOTO_VARIES and TRACKS and OVERSHOOTS else
        "direction input changes the renders far more than the photographs change with viewpoint")
-    + ", and the coarse to fine sampler places samples well but pays only at large budgets "
+    + ", and the coarse-to-fine sampler places samples well but pays only at large budgets "
     "here.")
 
 V["zhang_bib"] = (
